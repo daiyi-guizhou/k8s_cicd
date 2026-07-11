@@ -4,6 +4,114 @@
 
 ---
 
+## 0. 集群搭建
+
+### 0.1 Docker Desktop 启用 Kubernetes（推荐，本项目的方案）
+
+Docker Desktop 内置了 Kubernetes，一键启用即可。
+
+**步骤：**
+
+1. **安装 Docker Desktop**
+   - 下载 [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)
+   - 安装时勾选 "Use WSL 2 instead of Hyper-V"（推荐）
+
+2. **启用 Kubernetes**
+   - Docker Desktop → 右上角齿轮 ⚙️ Settings → **Kubernetes** 标签
+   - 勾选 ✅ **Enable Kubernetes**
+   - 点击 **Apply & Restart**，等待左下角 Kubernetes 图标变绿
+
+3. **验证集群**
+   ```bash
+   kubectl cluster-info
+   kubectl get nodes
+   # 预期输出:
+   # NAME                   STATUS   ROLES           AGE   VERSION
+   # docker-desktop         Ready    control-plane   ...   v1.34.x
+   ```
+
+> ⚠️ **注意**：如果 `kubectl` 未安装，Docker Desktop 自带了一个，位于 `C:\Program Files\Docker\Docker\resources\bin\kubectl.exe`。也可以单独安装 [kubectl](https://kubernetes.io/docs/tasks/tools/)。
+
+**资源调整（可选）：**
+
+Docker Desktop → Settings → Resources → Advanced，根据机器配置调整：
+- CPUs: 4-8 核
+- Memory: 8-16 GB
+- Swap: 2-4 GB
+
+### 0.2 其他 K8s 集群方案
+
+如果不想用 Docker Desktop K8s，也可以选择以下替代方案：
+
+#### Minikube
+
+```bash
+# 安装 (Windows 用 Chocolatey 或直接下载 exe)
+choco install minikube
+
+# 启动集群（2 核 4G）
+minikube start --cpus=2 --memory=4096
+
+# 启用 ingress 插件
+minikube addons enable ingress
+
+# 验证
+kubectl get nodes
+```
+
+#### Kind (Kubernetes in Docker)
+
+```bash
+# 安装
+choco install kind
+
+# 创建单节点集群
+kind create cluster --name k8s-console
+
+# 验证
+kubectl get nodes
+```
+
+#### k3s
+
+```bash
+# 在 WSL2 / Linux 中一键安装
+curl -sfL https://get.k3s.io | sh -
+
+# 获取 kubeconfig
+sudo cat /etc/rancher/k3s/k3s.yaml > ~/.kube/config
+
+# 验证
+kubectl get nodes
+```
+
+| 方案 | 优点 | 缺点 | 适合场景 |
+|------|------|------|---------|
+| **Docker Desktop K8s** | 一键启用，零配置 | 单节点，版本绑定 Docker | 本地开发、学习（本项目使用） |
+| **Minikube** | 多节点、功能全、addons 丰富 | 占用资源多、需额外安装 | 本地开发、功能验证 |
+| **Kind** | 轻量、启动快、支持 CI | 非持久化存储（默认） | CI/CD 测试、临时环境 |
+| **k3s** | 极轻量、接近生产 | 非标准发行版、部分组件裁剪 | 边缘计算、轻量生产 |
+
+### 0.3 集群搭建后的关键组件
+
+集群搭建完成后，默认**不包含** Ingress Controller 和存储控制器。本项目按以下顺序补充：
+
+```
+① 搭建 K8s 集群（本节）
+    ↓
+② 安装 Ingress-NGINX（见第 5 节，或 bash deploy/deploy-all.sh）
+    ↓
+③ 部署数据库 MySQL + Redis（kubectl apply -f deploy/database/）
+    ↓
+④ 部署 K8s Console 应用（kubectl apply -f deploy/console/）
+    ↓
+⑤ 启动本地网关，通过域名访问（bash deploy/gateway/start.sh）
+```
+
+> 📖 完整部署流程见 [项目根目录 README.md](../README.md)
+
+---
+
 ## 1. 集群概览
 
 本集群由 **Docker Desktop** 内置的 Kubernetes 提供，运行在本机 WSL Ubuntu 环境之上。

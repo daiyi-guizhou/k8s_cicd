@@ -8,7 +8,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: console.k8s.local
+    - host: k8s-cicd.daiyi.local.com
       http:
         paths:
           - path: /api

@@ -1,5 +1,8 @@
 #!/bin/bash
-# K8s Ingress 网关一键部署脚本
+# K8s Ingress 网关 + 演示应用 一键部署脚本
+# ⚠️ 此脚本部署的是 ingress-nginx 基础设施 + 演示应用 (prd-app, host: myapp.local)
+#    k8s-console 控制台应用部署请参考: kubectl apply -f deploy/console/
+#    完整部署流程请参考: 项目根目录 README.md
 # 用途: 按依赖顺序 apply 所有 YAML 文件
 # 用法: bash deploy-all.sh [clean]
 #        clean 参数: 先删除所有资源再重新部署
@@ -13,7 +16,6 @@ if [ "$1" = "clean" ]; then
   kubectl -n prd delete ingress prd-app --ignore-not-found
   kubectl -n prd delete svc prd-app --ignore-not-found
   kubectl -n prd delete deploy prd-app --ignore-not-found
-  kubectl -n prd delete secret docker-registry git-credentials --ignore-not-found
   kubectl -n ingress-nginx delete ds ingress-nginx-controller --ignore-not-found
   kubectl -n ingress-nginx delete svc ingress-nginx-controller --ignore-not-found
   kubectl -n ingress-nginx delete cm ingress-nginx-controller tcp-services udp-services --ignore-not-found
@@ -27,38 +29,25 @@ if [ "$1" = "clean" ]; then
 fi
 
 echo "📦 1/7 创建 Namespace..."
-kubectl apply -f "$DIR/01-namespaces.yaml"
+kubectl apply -f "$DIR/ingress-nginx/01-namespace.yaml"
 
 echo "🔐 2/7 部署 RBAC..."
-kubectl apply -f "$DIR/02-rbac.yaml"
+kubectl apply -f "$DIR/ingress-nginx/02-rbac.yaml"
 
 echo "⚙️  3/7 部署 ConfigMap..."
-kubectl apply -f "$DIR/03-configmaps.yaml"
+kubectl apply -f "$DIR/ingress-nginx/03-configmaps.yaml"
 
-echo "🔑 4/7 创建 Secrets..."
-kubectl apply -f "$DIR/04-secrets.yaml"
+echo "🏷️  4/7 创建 IngressClass..."
+kubectl apply -f "$DIR/ingress-nginx/06-ingressclass.yaml"
 
 echo "🚀 5/7 部署 Ingress Controller (DaemonSet)..."
-kubectl apply -f "$DIR/05-daemonset.yaml"
+kubectl apply -f "$DIR/ingress-nginx/04-daemonset.yaml"
 
 echo "🌐 6/7 创建 Service (NodePort :30000)..."
-kubectl apply -f "$DIR/06-service.yaml"
+kubectl apply -f "$DIR/ingress-nginx/05-service.yaml"
 
-# 创建 IngressClass (独立资源，不在 YAML 文件中)
-echo "🏷️  创建 IngressClass..."
-kubectl apply -f - <<EOF
-apiVersion: networking.k8s.io/v1
-kind: IngressClass
-metadata:
-  name: nginx
-  labels:
-    app.kubernetes.io/name: ingress-nginx
-spec:
-  controller: k8s.io/ingress-nginx
-EOF
-
-echo "🏗️  7/7 部署业务应用 (Deployment + Service + Ingress)..."
-kubectl apply -f "$DIR/07-prd-app.yaml"
+echo "🏗️  7/7 部署业务演示应用 (Deployment + Service + Ingress)..."
+kubectl apply -f "$DIR/demo/01-prd-app.yaml"
 
 echo ""
 echo "⏳ 等待所有 Pod 就绪..."
@@ -87,5 +76,5 @@ echo ""
 echo "# 通过 NodePort 测试"
 echo "curl -H 'Host: myapp.local' http://127.0.0.1:30000/"
 echo ""
-echo "# 完整链路 (需先部署 OpenResty)"
-echo "curl -H 'Host: myapp.local' http://127.0.0.1/"
+echo "# 完整链路 (需先部署本地网关)"
+echo "curl -H 'Host: myapp.local' http://127.0.0.1:9001/"
