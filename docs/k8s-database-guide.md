@@ -1,0 +1,168 @@
+# Database 服务文档（K8s 部署）
+
+## 概述
+
+在 K8s 集群 `database` namespace 中部署了 MySQL 8.0 和 Redis 7，供开发/测试使用。
+
+## 部署架构
+
+| 组件   | 类型         | 版本    | 存储 | 副本 | 内部地址                |
+|--------|-------------|---------|------|------|------------------------|
+| MySQL  | StatefulSet  | 8.0.46  | 10Gi | 1    | `mysql.database.svc`   |
+| Redis  | Deployment   | 7-alpine| 5Gi  | 1    | `redis.database.svc`   |
+
+## 连接信息
+
+| 项目     | 值                          |
+|----------|-----------------------------|
+| Namespace| `database`                  |
+| MySQL 地址 | `mysql.database.svc:3306` |
+| MySQL Root 密码 | `RootPass2024!`       |
+| MySQL 用户 | `appuser`                |
+| MySQL 用户密码 | `UserPass2024!`      |
+| MySQL 数据库 | `appdb`                 |
+| Redis 地址 | `redis.database.svc:6379` |
+| Redis 密码 | `RedisPass2024!`          |
+
+## 常用命令
+
+### 部署 / 重新部署
+
+```bash
+# 首次部署（全部资源）
+kubectl apply -f deploy/database/
+
+# 单独重新部署某个组件
+kubectl apply -f deploy/database/04-mysql.yaml
+kubectl apply -f deploy/database/05-redis.yaml
+```
+
+### 查看状态
+
+```bash
+# 查看所有资源
+kubectl get all,pvc,secret,cm -n database
+
+# 查看 Pod 状态
+kubectl get pods -n database
+
+# 查看日志
+kubectl logs -n database -l app=mysql
+kubectl logs -n database -l app=redis
+
+# 查看 PVC 使用情况
+kubectl get pvc -n database
+```
+
+### 重启
+
+```bash
+# 重启 MySQL
+kubectl rollout restart statefulset/mysql -n database
+
+# 重启 Redis
+kubectl rollout restart deployment/redis -n database
+
+# 等待就绪
+kubectl wait --for=condition=ready pod -n database --all --timeout=120s
+```
+
+### 连接测试
+
+```bash
+# MySQL — 通过 Pod 直接连
+kubectl exec -n database mysql-0 -- mysql -u root -pRootPass2024! -e "SHOW DATABASES;"
+
+# MySQL — 通过另一个 Pod 连（集群内）
+kubectl run mysql-client --rm -it --image=mysql:8.0 --restart=Never -n database -- \
+  mysql -h mysql.database.svc -u root -pRootPass2024! -e "SELECT VERSION();"
+
+# Redis
+kubectl exec -n database deploy/redis -- redis-cli -a RedisPass2024! ping
+
+# Redis 交互模式
+kubectl exec -n database deploy/redis -it -- redis-cli -a RedisPass2024!
+```
+
+### 完整卸载
+
+```bash
+kubectl delete namespace database
+# 注意：PVC 数据会被删除。如需保留数据，请先备份。
+```
+
+### 仅停止（保留数据和namespace）
+
+```bash
+# 缩容到 0（停止 Pod，保留 PVC）
+kubectl scale statefulset/mysql --replicas=0 -n database
+kubectl scale deployment/redis --replicas=0 -n database
+
+# 恢复（扩容到 1）
+kubectl scale statefulset/mysql --replicas=1 -n database
+kubectl scale deployment/redis --replicas=1 -n database
+```
+
+## 应用连接示例
+
+在部署到 K8s 的应用中使用以下环境变量：
+
+```yaml
+env:
+- name: MYSQL_HOST
+  value: "mysql.database.svc"
+- name: MYSQL_PORT
+  value: "3306"
+- name: MYSQL_USER
+  value: "appuser"
+- name: MYSQL_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: mysql-secret
+      key: user-password
+- name: MYSQL_DATABASE
+  value: "appdb"
+- name: REDIS_HOST
+  value: "redis.database.svc"
+- name: REDIS_PORT
+  value: "6379"
+- name: REDIS_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: redis-secret
+      key: password
+```
+
+## 配置修改
+
+MySQL 和 Redis 的配置通过 ConfigMap 管理，修改后需重启对应的 Pod：
+
+```bash
+# 1. 编辑 ConfigMap
+kubectl edit configmap mysql-config -n database
+# 或
+kubectl edit configmap redis-config -n database
+
+# 2. 重启使配置生效
+kubectl rollout restart statefulset/mysql -n database
+# 或
+kubectl rollout restart deployment/redis -n database
+```
+
+## 部署文件清单
+
+```
+deploy/database/
+├── 01-namespace.yaml    # database namespace
+├── 02-secrets.yaml      # MySQL/Redis 密码 Secret
+├── 03-configmaps.yaml   # MySQL/Redis 配置
+├── 04-mysql.yaml        # MySQL StatefulSet + Headless Service
+└── 05-redis.yaml        # Redis Deployment + Service + PVC
+```
+
+## 注意事项
+
+1. **密码安全**：当前密码为测试用途写在 YAML 中，生产环境请使用 `kubectl create secret` 或外部 Secret 管理工具（如 Vault）。
+2. **数据持久化**：MySQL 使用 StatefulSet 的 `volumeClaimTemplates` 自动创建 PVC；Redis 使用显式 PVC。删除 namespace 时数据会丢失。
+3. **存储**：使用 `hostpath` provisioner（本地路径），数据存储在 K8s 节点本地，不适合多节点集群。
+4. **单副本**：当前都为单副本，无高可用。生产环境建议使用 MySQL Operator / Redis Sentinel 或 Cluster 方案。

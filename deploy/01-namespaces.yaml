@@ -1,0 +1,12 @@
+# 01-namespaces.yaml
+# 创建 ingress-nginx 和 prd 命名空间
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prd

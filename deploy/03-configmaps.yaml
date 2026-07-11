@@ -1,0 +1,54 @@
+# 03-configmaps.yaml
+# 配置层: controller config + tcp-services + udp-services
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+data:
+  # 日志格式设置为 JSON，便于后续 ELK/Loki 采集
+  log-format-upstream: '{"time":"$time_iso8601","remote_addr":"$remote_addr","x_forwarded_for":"$http_x_forwarded_for","request_id":"$req_id","remote_user":"$remote_user","bytes_sent":$bytes_sent,"request_time":$request_time,"status":$status,"vhost":"$host","request_proto":"$server_protocol","path":"$uri","request_query":"$args","request_length":$request_length,"duration":$request_time,"method":"$request_method","http_referrer":"$http_referer","http_user_agent":"$http_user_agent","upstream_addr":"$upstream_addr","upstream_status":"$upstream_status","upstream_response_time":"$upstream_response_time"}'
+
+  # proxy 超时
+  proxy-connect-timeout: "15"
+  proxy-read-timeout: "600"
+  proxy-send-timeout: "600"
+
+  # 允许的最大 body 大小
+  proxy-body-size: "64m"
+
+  # 启用 SSL 透传 (如果 OpenResty 已做终止)
+  use-forwarded-headers: "true"
+  compute-full-forward-for: "true"
+
+  # 启用 gzip
+  enable-gzip: "true"
+
+  # 隐藏 nginx 版本号
+  server-tokens: "false"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcp-services
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+data: {}
+#  示例: "5432": "prd/postgres-service:5432"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: udp-services
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+data: {}
+#  示例: "53": "kube-system/kube-dns:53"

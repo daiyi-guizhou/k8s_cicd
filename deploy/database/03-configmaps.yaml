@@ -1,0 +1,39 @@
+# MySQL ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: database
+data:
+  my.cnf: |
+    [mysqld]
+    character-set-server=utf8mb4
+    collation-server=utf8mb4_unicode_ci
+    default-authentication-plugin=mysql_native_password
+    max_connections=200
+    max_allowed_packet=64M
+    innodb_buffer_pool_size=256M
+    innodb_log_file_size=128M
+    slow_query_log=1
+    slow_query_log_file=/var/log/mysql/slow.log
+    long_query_time=2
+---
+# Redis ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: database
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    port 6379
+    requirepass RedisPass2024!
+    save 900 1
+    save 300 10
+    save 60 10000
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+    appendonly yes
+    appendfsync everysec
+    dir /data
