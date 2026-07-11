@@ -83,6 +83,9 @@ class TokenRefreshMiddleware:
     Checks the absolute_expiry in token:meta — if exceeded, rejects with 1007.
     """
 
+    def __init__(self, get_response):
+        self.get_response = get_response
+
     def __call__(self, request):
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
         if not auth_header.startswith("Token "):
