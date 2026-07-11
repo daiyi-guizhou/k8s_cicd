@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8s-console
+  namespace: prd
+  labels:
+    app: k8s-console
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: console.k8s.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: k8s-console-backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: k8s-console-frontend
+                port:
+                  number: 80

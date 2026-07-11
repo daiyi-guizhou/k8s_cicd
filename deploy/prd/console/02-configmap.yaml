@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-console-config
+  namespace: prd
+data:
+  DJANGO_DEBUG: "False"
+  MYSQL_HOST: "mysql.database.svc"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "appdb"
+  REDIS_HOST: "redis.database.svc"
+  REDIS_PORT: "6379"
