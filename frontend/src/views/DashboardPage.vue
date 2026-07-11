@@ -1,6 +1,11 @@
 <template>
   <div>
-    <h2 style="margin-bottom:20px;">📊 集群概览</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2>📊 集群概览</h2>
+      <span v-if="clusterStore.current" style="font-size:13px;color:var(--color-text-secondary);">
+        当前集群：<strong>{{ clusterStore.current.name }}</strong>
+      </span>
+    </div>
     <div class="dashboard-grid">
       <div class="card stat-card" v-for="stat in stats" :key="stat.label">
         <div class="stat-value">{{ stat.value }}</div>
@@ -13,7 +18,10 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
+import { useClusterStore } from "../stores/cluster";
 import { listResources } from "../api/resources";
+
+const clusterStore = useClusterStore();
 
 const stats = ref([
   { label: "Namespace", value: "..." },
@@ -25,6 +33,7 @@ const stats = ref([
 const error = ref("");
 
 onMounted(async () => {
+  if (!clusterStore.currentId) return;
   const types = [
     { key: "namespace", label: "Namespace" },
     { key: "deployment", label: "Deployment" },

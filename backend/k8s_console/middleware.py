@@ -82,6 +82,17 @@ class AuditLoggerMiddleware:
         resource_name = body.get("name", "")
         namespace = body.get("namespace", "")
 
+        # Resolve cluster_id to cluster name
+        cluster_name = ""
+        cluster_id_from_body = body.get("cluster_id")
+        if cluster_id_from_body:
+            try:
+                from apps.clusters.models import Cluster
+                c = Cluster.objects.only("name").get(id=cluster_id_from_body)
+                cluster_name = c.name
+            except Exception:
+                cluster_name = str(cluster_id_from_body)
+
         is_success = 200 <= response.status_code < 300
         result = "success" if is_success else "fail"
         error_msg = ""
@@ -105,6 +116,7 @@ class AuditLoggerMiddleware:
             resource_type=resource_type,
             resource_name=resource_name,
             namespace=namespace or "",
+            cluster_name=cluster_name,
             detail=detail,
             result=result,
             error_msg=error_msg,

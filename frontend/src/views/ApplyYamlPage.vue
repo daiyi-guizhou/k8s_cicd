@@ -1,6 +1,14 @@
 <template>
   <div>
-    <h2 style="margin-bottom:16px;">🛠 Apply YAML</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2>🛠 Apply YAML</h2>
+      <span v-if="clusterStore.current" style="font-size:13px;color:var(--color-text-secondary);">
+        目标集群：<strong>{{ clusterStore.current.name }}</strong>
+      </span>
+    </div>
+    <div v-if="!clusterStore.currentId" class="card" style="border-color:#fbbf24;color:#92400e;margin-bottom:16px;">
+      ⚠ 请先在侧边栏选择一个目标集群
+    </div>
     <div class="apply-layout">
       <div class="editor-panel">
         <textarea
@@ -30,9 +38,11 @@
 
 <script setup>
 import { ref, inject } from "vue";
+import { useClusterStore } from "../stores/cluster";
 import { applyYaml } from "../api/resources";
 
 const toast = inject("toast");
+const clusterStore = useClusterStore();
 const yamlContent = ref("");
 const applying = ref(false);
 const result = ref(null);

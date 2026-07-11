@@ -1,0 +1,216 @@
+# 多集群管理 — 添加集群教程
+
+> **最后更新**: 2026-07-11
+
+---
+
+## 1. 如何找到你的 Kubeconfig
+
+### 1.1 默认路径
+
+kubeconfig 文件通常位于以下位置之一：
+
+| 环境 | 默认路径 |
+|------|---------|
+| **Linux / macOS** | `~/.kube/config` |
+| **Windows** | `C:\Users\<用户名>\.kube\config` |
+| **WSL (Windows 内)** | `~/.kube/config`（同 Linux）|
+| **KUBECONFIG 环境变量** | `echo $KUBECONFIG` 查看，可能有自定义路径 |
+
+### 1.2 获取 kubeconfig 内容
+
+**方法一：直接读取文件（推荐）**
+
+```bash
+cat ~/.kube/config
+```
+
+**方法二：通过 kubectl 导出（已脱敏版本）**
+
+```bash
+kubectl config view
+```
+
+> ⚠️ **注意**: `kubectl config view` 会隐藏证书和密钥数据，不适合直接使用（无法连接集群）。请使用 `cat ~/.kube/config` 获取完整内容。
+
+**方法三：如果配置分成了多个文件**
+
+```bash
+# 先确认真正的 kubeconfig 位置
+echo $KUBECONFIG
+
+# 合并多个 kubeconfig 到标准输出
+kubectl config view --raw
+
+# 或者用 KUBECONFIG 变量串联
+export KUBECONFIG=~/.kube/config:~/.kube/cluster-prod.yaml:~/.kube/cluster-dev.yaml
+kubectl config view --raw
+```
+
+### 1.3 各主流 K8s 方案的 kubeconfig 获取方式
+
+| 方案 | 获取方式 |
+|------|---------|
+| **Docker Desktop** | `cat ~/.kube/config` — Docker Desktop 自动生成 |
+| **Minikube** | `minikube kubectl -- config view --raw` 或 `cat ~/.kube/config` |
+| **k3s** | `sudo cat /etc/rancher/k3s/k3s.yaml`（需改 server 地址为实际 IP）|
+| **Kind** | `kind get kubeconfig --name <集群名>` |
+| **AKS** | `az aks get-credentials --name <集群名> --resource-group <资源组>` |
+| **EKS** | `aws eks update-kubeconfig --name <集群名> --region <区域>` |
+| **GKE** | `gcloud container clusters get-credentials <集群名> --zone <区域>` |
+| **Rancher** | 登录 Rancher UI → 点击集群 → "Kubeconfig File" 下载 |
+| **KubeSphere** | 集群管理 → 选择集群 → "获取 kubeconfig" |
+| **自建集群** | 从 master 节点复制 `/etc/kubernetes/admin.conf` |
+
+---
+
+## 2. 在 K8s Console 中添加集群
+
+### 2.1 操作步骤
+
+1. **登录管理后台**
+   - 使用管理员账号登录（admin 用户）
+   - 普通用户请先联系管理员
+
+2. **进入集群管理页面**
+   - 点击左侧导航 → 🖥 **集群管理**
+
+3. **添加新集群**
+   - 点击右上角 **"+ 添加集群"** 按钮
+   - 填写以下信息：
+
+   | 字段 | 必填 | 说明 |
+   |------|------|------|
+   | **集群名称** | ✅ | 如 "生产集群"、"开发集群"、"本机 Docker" |
+   | **描述** | ❌ | 可选的备注信息 |
+   | **Kubeconfig 内容** | ❌ | 粘贴完整的 kubeconfig YAML；留空则使用服务器本地的 `~/.kube/config` |
+
+4. **点击"保存"**
+   - 创建成功后，集群会出现在列表中
+
+5. **测试连接**
+   - 在集群列表中找到刚添加的集群
+   - 点击 **"测试"** 按钮
+   - 看到 ✅ "集群连接正常" + Namespace 数量 + K8s 版本号表示连接成功
+   - 如果 ❌ 失败，检查 kubeconfig 内容是否完整且证书有效
+
+### 2.2 本机集群示例
+
+当前开发环境是 **Docker Desktop 内置 Kubernetes**，kubeconfig 路径为：
+
+```
+~/.kube/config
+```
+
+集群信息：
+- 集群名称：`docker-desktop`
+- API Server：`https://127.0.0.1:55270`
+- 节点数：1 (control-plane)
+- K8s 版本：v1.34.3
+
+在 Console 中添加时，集群名称可填 `本机 Docker` 或其他便于记忆的名字，Kubeconfig 内容留空（如果后端和集群在同一台机器上，会自动读取 `~/.kube/config`），或直接粘贴 `cat ~/.kube/config` 的输出。
+
+### 2.3 连接方式说明
+
+| 场景 | Kubeconfig 内容 | 说明 |
+|------|----------------|------|
+| **后端在集群内** | 留空 | 自动使用 in-cluster config (ServiceAccount) |
+| **后端在本机** | 留空 | 自动读取服务器本地的 `~/.kube/config` |
+| **远程集群** | 粘贴完整 kubeconfig | 适用于外部集群或跨网络环境 |
+
+> 💡 **推荐做法**：即使是本机集群，也把 kubeconfig 内容粘贴到 Console 中。这样即使服务器重启、`~/.kube/config` 路径变化，Console 仍然能连接到集群。
+
+---
+
+## 3. 安全注意事项
+
+### 3.1 kubeconfig 文件包含敏感信息
+
+kubeconfig 中包含 **base64 编码的 TLS 证书和私钥**，可被用于完全控制集群。请：
+
+- ✅ 仅在可信网络传输（HTTPS）
+- ✅ 使用管理员权限限制集群管理页面的访问
+- ✅ 定期轮换 kubeconfig 中的证书
+- ❌ 不要将 kubeconfig 提交到 Git 仓库
+- ❌ 不要在聊天工具中分享 kubeconfig
+
+### 3.2 建议：创建专用 ServiceAccount
+
+为 Console 创建**只读或受限权限的 ServiceAccount**，而非直接使用 admin 证书：
+
+```bash
+# 创建 namespace
+kubectl create namespace k8s-console
+
+# 创建 ServiceAccount
+kubectl create sa console-viewer -n k8s-console
+
+# 创建 ClusterRole（只读）
+kubectl create clusterrole console-viewer-role \
+  --verb=get,list,watch \
+  --resource=pods,deployments,services,ingresses,daemonsets,statefulsets,configmaps,secrets,roles,rolebindings,clusterroles,clusterrolebindings,serviceaccounts,namespaces
+
+# 绑定
+kubectl create clusterrolebinding console-viewer-binding \
+  --clusterrole=console-viewer-role \
+  --serviceaccount=k8s-console:console-viewer
+
+# 获取 Token
+kubectl create token console-viewer -n k8s-console --duration=8760h
+```
+
+将生成的 Token 写入 kubeconfig 后粘贴到 Console 中，即可限制 Console 的集群操作范围。
+
+---
+
+## 4. 故障排查
+
+| 问题 | 可能原因 | 解决方法 |
+|------|---------|---------|
+| 连接测试失败 | Kubeconfig 不完整 | 重新执行 `cat ~/.kube/config` 复制全部内容 |
+| 连接测试失败 | 证书过期 | 在集群所在机器上执行 `kubectl get nodes` 验证 |
+| 连接测试失败 | 网络不通 | 确保 Console 后端能访问 kubeconfig 中的 `server` 地址 |
+| 集群列表为空 | 尚未添加集群 | 管理员需在"集群管理"页面添加 |
+| 切换集群后无数据 | 集群凭证过期 | 更新集群的 kubeconfig 内容，然后重新测试 |
+| "缺少 cluster_id" 错误 | 未选择集群 | 在侧边栏顶部的下拉框中选择目标集群 |
+
+---
+
+## 5. 多集群操作演示
+
+```
+侧边栏
+┌─────────────────────┐
+│ ☸️ K8s Console      │
+├─────────────────────┤
+│ [本机 Docker ▼]      │  ← 集群选择器，切换操作目标
+│ 当前集群            │
+├─────────────────────┤
+│ 🖥 集群管理          │  ← 管理员添加/编辑/删除集群
+├─────────────────────┤
+│ 📊 仪表盘           │  ← 数据来自当前选中集群
+│ 📦 资源管理         │
+│   Namespace         │
+│   Deployment        │  ← 所有资源操作都指向当前集群
+│   Pod               │
+│   Service           │
+│   ...               │
+├─────────────────────┤
+│ 🛠 Apply YAML       │  ← YAML 应用到当前集群
+├─────────────────────┤
+│ 👤 用户管理         │
+│ 📋 审计日志         │  ← 记录每次操作的目标集群
+│                     │
+│       admin        │
+│      [登出]        │
+└─────────────────────┘
+```
+
+---
+
+## 6. 参考
+
+- [本地 K8s 集群使用指南](./k8s-local-guide.md)
+- [数据库部署指南](./k8s-database-guide.md)
+- [Kubernetes 认证文档](https://kubernetes.io/docs/reference/access-authn-authz/authentication/)
+- [kubectl 配置文件详解](https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/)

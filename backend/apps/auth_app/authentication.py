@@ -38,3 +38,7 @@ class TokenAuthentication:
         if user is None:
             return None
         return (user, token)
+
+    def authenticate_header(self, request):
+        """Return the string to include in the WWW-Authenticate header."""
+        return self.keyword

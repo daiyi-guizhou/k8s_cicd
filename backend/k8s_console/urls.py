@@ -5,4 +5,5 @@ urlpatterns = [
     path("api/", include("apps.auth_app.urls")),
     path("api/", include("apps.resources.urls")),
     path("api/", include("apps.audit.urls")),
+    path("api/", include("apps.clusters.urls")),
 ]

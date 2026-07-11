@@ -122,6 +122,22 @@ html, body, #app {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
+.form-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: "Fira Code", "Cascadia Code", monospace;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s;
+}
+.form-textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

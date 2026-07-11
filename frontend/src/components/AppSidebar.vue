@@ -2,6 +2,28 @@
   <aside class="sidebar">
     <div class="sidebar-brand">☸️ K8s Console</div>
 
+    <!-- Cluster selector -->
+    <div class="sidebar-cluster-select">
+      <select v-model="selectedClusterId" @change="onClusterChange" class="cluster-select">
+        <option :value="null" disabled>-- 选择集群 --</option>
+        <option v-for="c in clusterStore.clusters" :key="c.id" :value="c.id">
+          {{ c.name }}
+        </option>
+      </select>
+      <div v-if="clusterStore.current" class="cluster-hint">
+        {{ clusterStore.current.description || '当前集群' }}
+      </div>
+      <div v-if="!clusterStore.hasClusters" class="cluster-hint" style="color:#fbbf24;">
+        ⚠ 请先添加集群
+      </div>
+    </div>
+
+    <router-link to="/clusters" class="sidebar-item" active-class="active">
+      🖥 集群管理
+    </router-link>
+
+    <div class="sidebar-divider"></div>
+
     <router-link to="/" class="sidebar-item" active-class="active" exact>
       📊 仪表盘
     </router-link>
@@ -37,12 +59,21 @@
 </template>
 
 <script setup>
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../stores/auth";
+import { useClusterStore } from "../stores/cluster";
 import { logout } from "../api/auth";
 
 const auth = useAuthStore();
+const clusterStore = useClusterStore();
 const router = useRouter();
+
+const selectedClusterId = ref(clusterStore.currentId);
+
+function onClusterChange() {
+  clusterStore.selectCluster(selectedClusterId.value);
+}
 
 const resourceTypes = [
   { type: "namespace", label: "Namespace" },
@@ -88,6 +119,33 @@ async function doLogout() {
   font-size: 16px;
   font-weight: 700;
   color: #fff;
+}
+
+.sidebar-cluster-select {
+  padding: 0 12px 8px;
+}
+
+.cluster-select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #334155;
+  color: #e2e8f0;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.cluster-select:focus {
+  border-color: #3b82f6;
+}
+
+.cluster-hint {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+  padding-left: 4px;
 }
 
 .sidebar-section-label {

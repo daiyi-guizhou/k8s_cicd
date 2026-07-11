@@ -65,6 +65,18 @@ REDIS_URL = "redis://:RedisPass2024!@127.0.0.1:6379"
 python manage.py migrate --settings=k8s_console.settings_dev
 ```
 
+**或者使用纯 SQL 初始化（推荐，无需 migration 记录）**：
+
+```bash
+# 清理全部数据 + 重建表
+python manage.py clean_all_data --settings=k8s_console.settings_dev
+
+# 确认重建后标记 migration 为 fake（Django 不再重复建表）
+python manage.py migrate --fake --settings=k8s_console.settings_dev
+```
+
+> 📄 完整建表 SQL 见 [`sql/init_database.sql`](sql/init_database.sql)。每次表结构变更必须同步更新该文件。
+
 ### 6. 创建初始管理员
 
 ```bash
@@ -141,7 +153,19 @@ curl -s -X POST http://localhost:8000/api/auth/logout \
 | is_active | BooleanField | 是否启用 |
 | created_at | DateTimeField | 创建时间 |
 
-### audit_log
+### cluster (v1.1 新增)
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| id | AutoField | 主键 |
+| name | CharField(128) | 唯一集群名称 |
+| description | TextField | 描述 |
+| kubeconfig_content | TextField | kubeconfig YAML 内容；留空则使用默认 ~/.kube/config |
+| enabled | BooleanField | 是否启用 |
+| created_at | DateTimeField | 创建时间 |
+| updated_at | DateTimeField | 更新时间 |
+
+### audit_log (v1.1 新增 cluster_name 列)
 
 | 列 | 类型 | 说明 |
 |----|------|------|
@@ -151,8 +175,10 @@ curl -s -X POST http://localhost:8000/api/auth/logout \
 | resource_type | CharField(50) | 资源类型 |
 | resource_name | CharField(255) | 资源名称 |
 | namespace | CharField(100) | 命名空间 |
+| cluster_name | CharField(128) | 集群名称 (v1.1 新增) |
 | detail | JSONField | 操作详情 |
 | result | CharField(20) | `success` / `fail` |
+| error_msg | TextField | 错误信息 (v1.1 新增) |
 | created_at | DateTimeField | 操作时间 |
 
 ## API 概览
@@ -194,6 +220,11 @@ curl -s -X POST http://localhost:8000/api/auth/logout \
 | 资源 | `/api/resources/delete` | 删除资源 |
 | 资源 | `/api/resources/apply` | 应用 YAML |
 | 审计 | `/api/audit/list` | 管理员查看审计日志 |
+| 集群管理 | `/api/clusters/list` | 查看集群列表 |
+| 集群管理 | `/api/clusters/create` | 管理员添加集群 |
+| 集群管理 | `/api/clusters/update` | 管理员编辑集群 |
+| 集群管理 | `/api/clusters/delete` | 管理员删除集群 |
+| 集群管理 | `/api/clusters/test` | 测试集群连接 |
 
 ### 支持的资源类型
 

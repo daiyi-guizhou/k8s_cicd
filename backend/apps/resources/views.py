@@ -1,4 +1,4 @@
-"""K8s resource CRUD views."""
+"""K8s resource CRUD views — multi-cluster aware."""
 from kubernetes.client.rest import ApiException
 
 from rest_framework.decorators import api_view
@@ -15,6 +15,14 @@ from utils.response import (
     ERR_VALIDATION,
 )
 from utils.k8s_helper import wrap_k8s_error
+
+
+def _get_cluster_id(request):
+    """Extract cluster_id from request data. Raises ValueError if missing."""
+    cluster_id = request.data.get("cluster_id")
+    if cluster_id is None:
+        raise ValueError("缺少 cluster_id 参数")
+    return cluster_id
 
 
 def _check_namespaced(resource_type, namespace):
@@ -37,7 +45,7 @@ def _handle_api_error(exc, default_code=None):
 
 @api_view(["POST"])
 def resource_list(request):
-    """List resources: {resource_type, namespace?}"""
+    """List resources: {cluster_id, resource_type, namespace?}"""
     resource_type = request.data.get("resource_type", "").strip().lower()
     namespace = request.data.get("namespace", "").strip() or None
 
@@ -48,7 +56,8 @@ def resource_list(request):
         namespace = None
 
     try:
-        items = list_resources(resource_type, namespace=namespace)
+        cluster_id = _get_cluster_id(request)
+        items = list_resources(cluster_id, resource_type, namespace=namespace)
         return success(data={"items": items, "count": len(items)})
     except (ApiException, ValueError) as e:
         return _handle_api_error(e)
@@ -56,7 +65,7 @@ def resource_list(request):
 
 @api_view(["POST"])
 def resource_detail(request):
-    """Get resource detail as JSON: {resource_type, name, namespace?}"""
+    """Get resource detail as JSON: {cluster_id, resource_type, name, namespace?}"""
     resource_type = request.data.get("resource_type", "").strip().lower()
     name = request.data.get("name", "").strip()
     namespace = request.data.get("namespace", "").strip() or None
@@ -72,7 +81,8 @@ def resource_detail(request):
         return err
 
     try:
-        data = get_resource(resource_type, name, namespace=namespace)
+        cluster_id = _get_cluster_id(request)
+        data = get_resource(cluster_id, resource_type, name, namespace=namespace)
         return success(data=data)
     except (ApiException, ValueError) as e:
         return _handle_api_error(e)
@@ -80,7 +90,7 @@ def resource_detail(request):
 
 @api_view(["POST"])
 def resource_yaml(request):
-    """Get resource YAML: {resource_type, name, namespace?}"""
+    """Get resource YAML: {cluster_id, resource_type, name, namespace?}"""
     resource_type = request.data.get("resource_type", "").strip().lower()
     name = request.data.get("name", "").strip()
     namespace = request.data.get("namespace", "").strip() or None
@@ -96,7 +106,8 @@ def resource_yaml(request):
         return err
 
     try:
-        yaml_str = get_resource_yaml(resource_type, name, namespace=namespace)
+        cluster_id = _get_cluster_id(request)
+        yaml_str = get_resource_yaml(cluster_id, resource_type, name, namespace=namespace)
         return success(data={"yaml": yaml_str})
     except (ApiException, ValueError) as e:
         return _handle_api_error(e)
@@ -104,7 +115,7 @@ def resource_yaml(request):
 
 @api_view(["POST"])
 def resource_scale(request):
-    """Scale replicas: {resource_type, name, namespace?, replicas}"""
+    """Scale replicas: {cluster_id, resource_type, name, namespace?, replicas}"""
     resource_type = request.data.get("resource_type", "").strip().lower()
     name = request.data.get("name", "").strip()
     namespace = request.data.get("namespace", "").strip() or None
@@ -124,7 +135,8 @@ def resource_scale(request):
         return err
 
     try:
-        result = scale_resource(resource_type, name, namespace, replicas)
+        cluster_id = _get_cluster_id(request)
+        result = scale_resource(cluster_id, resource_type, name, namespace, replicas)
         return success(data={
             "resource_type": resource_type,
             "name": name,
@@ -137,7 +149,7 @@ def resource_scale(request):
 
 @api_view(["POST"])
 def resource_rollback(request):
-    """Rollback Deployment: {resource_type, name, namespace?, revision?}"""
+    """Rollback Deployment: {cluster_id, resource_type, name, namespace?, revision?}"""
     resource_type = request.data.get("resource_type", "").strip().lower()
     name = request.data.get("name", "").strip()
     namespace = request.data.get("namespace", "").strip() or None
@@ -154,7 +166,8 @@ def resource_rollback(request):
         return err
 
     try:
-        result = rollback_deployment(name, namespace, revision=revision)
+        cluster_id = _get_cluster_id(request)
+        result = rollback_deployment(cluster_id, name, namespace, revision=revision)
         rev_text = f"到版本 {revision}" if revision else "到上一个版本"
         return success(message=f"Deployment {name} 已回滚{rev_text}")
     except (ApiException, ValueError) as e:
@@ -163,7 +176,7 @@ def resource_rollback(request):
 
 @api_view(["POST"])
 def resource_delete(request):
-    """Delete resource: {resource_type, name, namespace?}"""
+    """Delete resource: {cluster_id, resource_type, name, namespace?}"""
     resource_type = request.data.get("resource_type", "").strip().lower()
     name = request.data.get("name", "").strip()
     namespace = request.data.get("namespace", "").strip() or None
@@ -179,7 +192,8 @@ def resource_delete(request):
         return err
 
     try:
-        delete_resource(resource_type, name, namespace=namespace)
+        cluster_id = _get_cluster_id(request)
+        delete_resource(cluster_id, resource_type, name, namespace=namespace)
         return success(message=f"已删除 {resource_type}/{name}")
     except (ApiException, ValueError) as e:
         return _handle_api_error(e)
@@ -187,14 +201,15 @@ def resource_delete(request):
 
 @api_view(["POST"])
 def resource_apply(request):
-    """Apply YAML: {yaml_content}"""
+    """Apply YAML: {cluster_id, yaml_content}"""
     yaml_content = request.data.get("yaml_content", "")
 
     if not yaml_content or not yaml_content.strip():
         return error(ERR_INVALID_YAML, "YAML 内容为空")
 
     try:
-        results = apply_yaml(yaml_content)
+        cluster_id = _get_cluster_id(request)
+        results = apply_yaml(cluster_id, yaml_content)
         return success(data={"results": results}, message=f"成功处理 {len(results)} 个资源")
     except (ApiException, ValueError, Exception) as e:
         if isinstance(e, ApiException):

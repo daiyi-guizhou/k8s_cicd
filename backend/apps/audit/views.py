@@ -65,6 +65,7 @@ def audit_list(request):
             "resource_type": log.resource_type,
             "resource_name": log.resource_name,
             "namespace": log.namespace,
+            "cluster_name": log.cluster_name,
             "detail": log.detail,
             "result": log.result,
             "error_msg": log.error_msg,

@@ -24,6 +24,7 @@ class AuditLog(models.Model):
     resource_type = models.CharField(max_length=50)
     resource_name = models.CharField(max_length=255, blank=True, default="")
     namespace = models.CharField(max_length=100, blank=True, default="")
+    cluster_name = models.CharField(max_length=128, blank=True, default="", verbose_name="集群名称")
     detail = models.JSONField(default=dict, blank=True)
     result = models.CharField(max_length=20, choices=RESULT_CHOICES)
     error_msg = models.TextField(blank=True, default="")

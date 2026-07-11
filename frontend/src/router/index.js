@@ -27,6 +27,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: "/clusters",
+    name: "ClusterManagement",
+    component: () => import("../views/ClusterManagementPage.vue"),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
     path: "/users",
     name: "UserManagement",
     component: () => import("../views/UserManagementPage.vue"),

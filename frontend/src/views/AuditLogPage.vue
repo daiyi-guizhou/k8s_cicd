@@ -35,6 +35,7 @@
           <th>操作</th>
           <th>资源</th>
           <th>Namespace</th>
+          <th>集群</th>
           <th>结果</th>
           <th>时间</th>
           <th>详情</th>
@@ -46,6 +47,7 @@
           <td><span class="tag tag-blue">{{ log.action_display }}</span></td>
           <td>{{ log.resource_type }}{{ log.resource_name ? '/' + log.resource_name : '' }}</td>
           <td>{{ log.namespace }}</td>
+          <td>{{ log.cluster_name || '-' }}</td>
           <td><span :class="['tag', log.result === 'success' ? 'tag-green' : 'tag-red']">{{ log.result }}</span></td>
           <td style="font-size:12px;">{{ log.created_at }}</td>
           <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="JSON.stringify(log.detail)">
