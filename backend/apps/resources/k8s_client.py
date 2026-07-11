@@ -160,7 +160,7 @@ def list_resources(resource_type, namespace=None):
             if namespace:
                 result = method(namespace)
             else:
-                result = method(_for_all_namespaces=True)
+                result = method(namespace="")
         else:
             result = method()
         items = []

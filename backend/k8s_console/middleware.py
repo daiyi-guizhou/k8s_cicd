@@ -1,7 +1,7 @@
 """Middleware: AuditLoggerMiddleware and TokenBlacklistMiddleware."""
 import json
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import JsonResponse, RawPostDataException
 from apps.auth_app.authentication import get_user_from_token
 import redis as _redis
 from django.conf import settings as _settings
@@ -75,7 +75,7 @@ class AuditLoggerMiddleware:
 
         try:
             body = json.loads(request.body.decode("utf-8")) if request.body else {}
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except (json.JSONDecodeError, UnicodeDecodeError, RawPostDataException):
             body = {}
 
         resource_type = body.get("resource_type", "")

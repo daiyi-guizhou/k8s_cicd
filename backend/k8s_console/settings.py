@@ -30,6 +30,8 @@ ROOT_URLCONF = "k8s_console.urls"
 
 WSGI_APPLICATION = "k8s_console.wsgi.application"
 
+STATIC_URL = "static/"
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
@@ -73,8 +75,8 @@ REST_FRAMEWORK = {
     "UNAUTHENTICATED_USER": None,
 }
 
-LANGUAGE_CODE = "zh-hans"
 TIME_ZONE = "Asia/Shanghai"
+LANGUAGE_CODE = "zh-hans"
 USE_I18N = True
 USE_TZ = True
 
