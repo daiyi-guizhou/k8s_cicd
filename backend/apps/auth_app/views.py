@@ -1,6 +1,9 @@
 """Auth views: login, logout, change-password, user management."""
 import hashlib
+import json
 import secrets
+from datetime import datetime, timedelta
+
 import redis
 
 from django.conf import settings
@@ -30,8 +33,6 @@ def _generate_token():
 @permission_classes([AllowAny])
 def login(request):
     """Login: {username, password} → {token, user}"""
-    import json
-    from datetime import datetime, timedelta
 
     username = request.data.get("username", "").strip()
     password = request.data.get("password", "")
