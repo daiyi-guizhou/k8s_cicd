@@ -30,6 +30,9 @@ def _generate_token():
 @permission_classes([AllowAny])
 def login(request):
     """Login: {username, password} → {token, user}"""
+    import json
+    from datetime import datetime, timedelta
+
     username = request.data.get("username", "").strip()
     password = request.data.get("password", "")
 
@@ -49,7 +52,25 @@ def login(request):
 
     token = _generate_token()
     r = _get_redis()
-    r.setex(f"token:auth:{token}", 86400 * 7, str(user.id))  # 7-day expiry
+
+    # 8h sliding TTL for auth key
+    auth_ttl = 28800  # 8 hours in seconds
+
+    # 24h absolute expiry for meta key
+    meta_ttl = 86400  # 24 hours in seconds
+    now = datetime.now()
+    absolute_expiry = now + timedelta(hours=24)
+    deploy_version = r.get("deploy:version") or "initial"
+
+    meta = json.dumps({
+        "user_id": str(user.id),
+        "login_at": now.isoformat(),
+        "absolute_expiry": absolute_expiry.isoformat(),
+        "deploy_version": deploy_version,
+    })
+
+    r.setex(f"token:auth:{token}", auth_ttl, str(user.id))
+    r.setex(f"token:meta:{token}", meta_ttl, meta)
 
     return success(data={
         "token": token,
@@ -57,7 +78,7 @@ def login(request):
             "id": user.id,
             "username": user.username,
             "role": user.role,
-        }
+        },
     }, message="登录成功")
 
 
@@ -73,6 +94,7 @@ def logout(request):
         if ttl > 0:
             r.setex(f"token:blacklist:{token}", ttl, user_id or "")
         r.delete(f"token:auth:{token}")
+        r.delete(f"token:meta:{token}")
     return success(message="已登出")
 
 
