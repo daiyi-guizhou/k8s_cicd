@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { ref, provide } from "vue";
+import { ref, provide, onMounted, onUnmounted } from "vue";
 
 const toasts = ref([]);
 let nextId = 0;
@@ -23,6 +23,22 @@ function show(message, type = "success", duration = 3000) {
     toasts.value = toasts.value.filter((t) => t.id !== id);
   }, duration);
 }
+
+/** Listen for external toast events (from Axios interceptors outside Vue tree) */
+function onExternalToast(e) {
+  const { message, type } = e.detail || {};
+  if (message) {
+    show(message, type || "error", 5000);
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("app-toast", onExternalToast);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("app-toast", onExternalToast);
+});
 
 provide("toast", { show });
 </script>
