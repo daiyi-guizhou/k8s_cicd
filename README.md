@@ -88,17 +88,49 @@
 
 ---
 
-## 快速开始 — 完整部署（4 步）
+## 快速开始 — 一键部署
 
 ### 前置条件
 
 - Windows 11 / WSL2
 - Docker Desktop（Kubernetes 已启用，v1.34+）
-- kubectl + Git Bash
+- kubectl + **Git Bash**（脚本执行环境）
 - Node.js 22+（前端本地开发）
 - Python 3.12+（后端本地开发）
 
+> ⚠️ **脚本执行环境**: `deploy-all.sh` / `clean-all.sh` / `gateway/start.sh` / `gateway/stop.sh` 必须在 **Git Bash (MINGW64)** 中执行，**不能在 WSL (Linux) 中直接执行**。
+>
+> **原因**: `npm install` 在 Windows 下安装的是 `@rollup/rollup-win32-x64-*` 原生模块，WSL 内 rollup 会尝试加载 `@rollup/rollup-linux-x64-gnu`（不存在），导致 `MODULE_NOT_FOUND` 错误。脚本中已内置 `npm install` 会自动检测当前平台，但如果 `node_modules` 已存在则不会触发重装。如需在 WSL 中执行，先 `rm -rf frontend/node_modules && cd frontend && npm install`。
+>
 > 💡 **K8s 集群还没搭好？** 参见 [docs/K8s集群使用指南.md § 0. 集群搭建](docs/K8s集群使用指南.md#0-集群搭建)，包含 Docker Desktop / Minikube / Kind / k3s 四种方案。
+
+### 一键部署
+
+```bash
+# 一键部署全部（构建镜像 + 数据库 + Ingress + Console + 注册集群 + 启动网关）
+bash deploy/deploy-all.sh
+
+# 如果已构建过镜像，跳过构建步骤
+bash deploy/deploy-all.sh --skip-build
+
+# 先清理再重新部署
+bash deploy/deploy-all.sh --clean
+```
+
+脚本自动完成：
+1. 构建后端镜像（Django + Gunicorn）
+2. 构建前端镜像（Vue SPA + Nginx）
+3. 部署 MySQL + Redis（database namespace）
+4. 部署 Ingress-NGINX + NodePort（ingress-nginx namespace）
+5. 部署 K8s Console Backend + Frontend + Ingress（prd namespace）
+6. 从 `deploy/kubeconfigs/` 自动注册集群 + 启动本地网关
+
+### 一键清理
+
+```bash
+bash deploy/clean-all.sh
+# 删除所有 namespace + cluster 资源 + 本地网关容器 + port-forward 进程
+```
 
 ### 步骤 0: 搭建 K8s 集群（如尚未搭建）
 
@@ -108,49 +140,32 @@ Docker Desktop → Settings → Kubernetes → ✅ Enable Kubernetes → Apply &
 kubectl get nodes  # 确认 STATUS=Ready
 ```
 
-### 步骤 1: 部署数据库（MySQL + Redis）
+### 步骤 1: （可选）手动分步部署
+
+如果不使用一键脚本，可以按以下步骤手动部署：
 
 ```bash
+# 1. 部署数据库
 kubectl apply -f deploy/database/
 kubectl wait --for=condition=ready pod -n database --all --timeout=120s
-```
 
-> 📖 详细说明见 [docs/数据库部署指南.md](docs/数据库部署指南.md)
+# 2. 部署 ingress-nginx
+kubectl apply -f deploy/ingress-nginx/
+kubectl wait --for=condition=ready pod -n ingress-nginx --selector=app.kubernetes.io/component=controller --timeout=120s
 
-### 步骤 2: 部署 Ingress-NGINX 网关
-
-```bash
-# 部署 ingress-nginx（包含 DaemonSet + NodePort + RBAC）
-bash deploy/deploy-all.sh
-
-# 验证
-kubectl get pods -n ingress-nginx
-kubectl get svc -n ingress-nginx
-# 预期: NodePort 80:30000/TCP
-```
-
-> 📖 详细说明见 [docs/K8s集群使用指南.md](docs/K8s集群使用指南.md) 第 5 节
-
-### 步骤 3: 部署 K8s Console 应用
-
-```bash
-# 1. 构建后端镜像
+# 3. 构建镜像
 DOCKER_BUILDKIT=0 docker build --pull=false -t k8s-console-backend:latest -f backend/Dockerfile backend/
-
-# 2. 构建前端镜像
 cd frontend && npm run build && cd ..
 DOCKER_BUILDKIT=0 docker build --pull=false -t k8s-console-frontend:latest -f frontend/Dockerfile.local frontend/
 
-# 3. 部署 K8s Console
+# 4. 部署 K8s Console
 kubectl apply -f deploy/console/
-
-# 4. 验证
-kubectl get pods -n prd
-# 预期: k8s-console-backend-xxx  Running
-#       k8s-console-frontend-xxx  Running
+kubectl wait --for=condition=ready pod -n prd --all --timeout=120s
 ```
 
-### 步骤 4: 启动本地网关，通过域名访问
+> 📖 详细说明见 [docs/数据库部署指南.md](docs/数据库部署指南.md)、[docs/本地网关部署指南.md](docs/本地网关部署指南.md)
+
+### 步骤 2: 配置 Windows hosts + 启动网关
 
 ```bash
 # 1. 配置 Windows hosts（管理员权限）
@@ -160,13 +175,15 @@ kubectl get pods -n prd
 # 2. 配置 Windows 代理绕过（如需要）
 # reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyOverride /t REG_SZ /d "原有值;*.daiyi.local.com" /f
 
-# 3. 启动网关
+# 3. 启动本地网关（已包含在 deploy-all.sh 中，也可单独执行）
 bash deploy/gateway/start.sh
 
 # 4. 浏览器访问
 # http://k8s-cicd.daiyi.local.com:9001
 ```
 
+> 💡 `start.sh` 内置 **NodePort + port-forward 双保险**：优先使用 NodePort 30000，不可达时自动启动 `kubectl port-forward` 兜底。
+>
 > 📖 详细说明见 [docs/本地网关部署指南.md](docs/本地网关部署指南.md)
 
 ---

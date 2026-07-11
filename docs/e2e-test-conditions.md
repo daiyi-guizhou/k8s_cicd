@@ -209,6 +209,10 @@
 
 ## 测试套件
 
+> **ℹ️ 测试方法说明：** 当 ChromeDevTools MCP 不可用时，可通过 API curl 直接验证后端功能（登录、CRUD、权限守卫、Token 管理等）。但前端 UI 交互（页面渲染、模态框、路由跳转、表单验证提示等）仍需浏览器测试。两种方式互补，API 测试覆盖后端逻辑，浏览器测试覆盖 UI/UX。
+>
+> **⚠️ Admin 初始密码：** 部署后 admin 的初始密码是随机生成的（见 Backend Pod 启动日志 `Initial password:`），不再是固定的 `admin/admin`。可通过 `kubectl logs -n prd -l app=k8s-console-backend | grep password` 查看，或通过 Django shell 重置。
+
 ### 冒烟测试
 
 改动后至少跑：

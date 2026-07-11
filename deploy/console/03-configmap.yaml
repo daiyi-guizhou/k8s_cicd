@@ -10,3 +10,5 @@ data:
   MYSQL_DATABASE: "appdb"
   REDIS_HOST: "redis.database.svc"
   REDIS_PORT: "6379"
+  ADMIN_USERNAME: "admin"
+  ADMIN_PASSWORD: "admin"

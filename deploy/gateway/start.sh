@@ -2,7 +2,8 @@
 # K8s Console 本地 NGINX 网关一键启动
 # 架构: 浏览器 → Docker NGINX (:9001) → K8s Ingress NodePort (:30000) → Ingress → Service → Pod
 #
-# 注意: ingress-nginx 已通过 NodePort 30000 暴露，无需 kubectl port-forward
+# ⚠️  执行环境: Git Bash (MINGW64) 或 WSL 均可（仅用 docker + kubectl + curl）
+# 设计: 优先 NodePort 30000，不可达时自动回退到 kubectl port-forward
 # 端口 9001 避免与 WSL wslrelay.exe / Windows 系统代理 冲突
 
 set -e
@@ -10,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IMAGE="nginx:latest"
 CONTAINER_NAME="k8s-gateway"
 HOST_PORT="9001"
+PF_PID_FILE="/tmp/k8s-gateway-pf.pid"
 
 echo "=========================================="
 echo "  K8s Console — Local NGINX Gateway"
@@ -18,10 +20,40 @@ echo "=========================================="
 
 # ── 1. 确认 K8s NodePort 可达 ──
 echo "[1/4] Checking K8s Ingress NodePort (30000)..."
-if curl -s -o /dev/null -w '%{http_code}' http://localhost:30000/ -H 'Host: k8s-cicd.daiyi.local.com' | grep -q '200\|301\|302'; then
+
+NODEPORT_OK=false
+if curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 \
+  http://localhost:30000/ -H 'Host: k8s-cicd.daiyi.local.com' 2>/dev/null | grep -q '200\|301\|302\|404\|500'; then
   echo "  ✅ NodePort 30000 reachable"
-else
-  echo "  ⚠️  NodePort 30000 not responding — please check ingress-nginx"
+  NODEPORT_OK=true
+fi
+
+# 如果 NodePort 不可达，启动 kubectl port-forward 兜底
+if ! $NODEPORT_OK; then
+  echo "  ⚠️  NodePort 30000 not responding → starting kubectl port-forward fallback..."
+
+  # 停掉旧的 port-forward
+  if [ -f "$PF_PID_FILE" ]; then
+    kill $(cat "$PF_PID_FILE") 2>/dev/null || true
+    rm -f "$PF_PID_FILE"
+  fi
+  pkill -f "kubectl port-forward.*ingress-nginx.*30000" 2>/dev/null || true
+  sleep 1
+
+  nohup kubectl port-forward -n ingress-nginx \
+    daemonset/ingress-nginx-controller 30000:80 --address 0.0.0.0 \
+    > /tmp/k8s-gateway-pf.log 2>&1 &
+  PF_PID=$!
+  echo $PF_PID > "$PF_PID_FILE"
+  sleep 3
+
+  # 再次验证
+  if curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 \
+    http://localhost:30000/ -H 'Host: k8s-cicd.daiyi.local.com' 2>/dev/null | grep -q '200\|301\|302\|404\|500'; then
+    echo "  ✅ port-forward started (PID: $PF_PID)"
+  else
+    echo "  ❌ port-forward also failed — please check ingress-nginx"
+  fi
 fi
 
 # ── 2. 拉取 nginx 镜像 ──

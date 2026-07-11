@@ -1,0 +1,3 @@
+# Ignore kubeconfig files (contain credentials)
+*.yaml
+*.yml
