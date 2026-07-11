@@ -59,7 +59,7 @@ REDIS_URL = (
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "apps.auth_app.views.TokenAuthentication",
+        "apps.auth_app.authentication.TokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",

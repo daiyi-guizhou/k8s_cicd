@@ -1,0 +1,9 @@
+.superpowers/
+*.pyc
+__pycache__/
+*.pyo
+.env
+venv/
+node_modules/
+dist/
+*.log

@@ -2,7 +2,12 @@
 import json
 from django.conf import settings
 from django.http import JsonResponse
-from apps.auth_app.views import _get_user_from_token, _get_redis
+from apps.auth_app.authentication import get_user_from_token
+import redis as _redis
+from django.conf import settings as _settings
+
+def _get_redis():
+    return _redis.Redis.from_url(_settings.REDIS_URL, decode_responses=True)
 
 
 class TokenBlacklistMiddleware:
@@ -45,7 +50,7 @@ class AuditLoggerMiddleware:
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
         if auth_header.startswith("Token "):
             token = auth_header[6:].strip()
-            user = _get_user_from_token(token)
+            user = get_user_from_token(token)
 
         action_map = {
             "resources/scale": "scale",

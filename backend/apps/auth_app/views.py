@@ -25,40 +25,6 @@ def _generate_token():
     return secrets.token_hex(20)
 
 
-def _get_user_from_token(token):
-    """Validate token and return user, or None."""
-    if not token:
-        return None
-    r = _get_redis()
-    # Check blacklist
-    if r.exists(f"token:blacklist:{token}"):
-        return None
-    # Look up token → user_id
-    user_id = r.get(f"token:auth:{token}")
-    if not user_id:
-        return None
-    try:
-        return User.objects.get(id=int(user_id), is_active=True)
-    except User.DoesNotExist:
-        return None
-
-
-class TokenAuthentication:
-    """DRF-compatible token authentication class."""
-    keyword = "Token"
-
-    @staticmethod
-    def authenticate(request):
-        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
-        if not auth_header.startswith("Token "):
-            return None
-        token = auth_header[6:].strip()
-        user = _get_user_from_token(token)
-        if user is None:
-            return None
-        return (user, token)
-
-
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
