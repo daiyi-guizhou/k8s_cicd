@@ -24,9 +24,9 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
     "k8s_console.middleware.VersionCheckMiddleware",
+    "k8s_console.middleware.TokenBlacklistMiddleware",
     "k8s_console.middleware.TokenRefreshMiddleware",
     "k8s_console.middleware.AuditLoggerMiddleware",
-    "k8s_console.middleware.TokenBlacklistMiddleware",
 ]
 
 ROOT_URLCONF = "k8s_console.urls"
