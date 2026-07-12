@@ -49,29 +49,35 @@ kubectl port-forward -n database svc/redis 6379:6379 &
 
 ### 4. 本地开发配置
 
-本地开发使用 `settings_dev.py`，它会自动覆盖集群内地址为 `127.0.0.1`：
+使用 `DJANGO_SETTINGS_MODULE` 环境变量切换配置：
 
-```python
-DEBUG = True
-DATABASES["default"]["HOST"] = "127.0.0.1"
-REDIS_URL = "redis://:RedisPass2024!@127.0.0.1:6379"
+```bash
+# Dev（本地 Docker Desktop）— 覆盖 DB/Redis 为 127.0.0.1
+export DJANGO_SETTINGS_MODULE=k8s_console.settings_dev
+
+# Prd（K8s Pod 内 / 生产镜像）— 从 ConfigMap/Secret 读取地址
+# export DJANGO_SETTINGS_MODULE=k8s_console.settings  （默认值，无需显式设置）
 ```
 
-如需自定义连接参数，直接编辑 `k8s_console/settings_dev.py`。
+不设置该变量时默认使用 `k8s_console.settings`（生产配置）。本地开发建议将其写入 conda env 或 shell profile 中自动生效。
 
 ### 5. 运行数据库迁移
 
 ```bash
+# Dev — 使用环境变量（推荐）
+export DJANGO_SETTINGS_MODULE=k8s_console.settings_dev
+python manage.py migrate
+python manage.py init_admin
+python manage.py runserver 0.0.0.0:8000
+
+# 或显式传递 --settings 参数
 python manage.py migrate --settings=k8s_console.settings_dev
 ```
 
 **或者使用纯 SQL 初始化（推荐，无需 migration 记录）**：
 
 ```bash
-# 清理全部数据 + 重建表
 python manage.py clean_all_data --settings=k8s_console.settings_dev
-
-# 确认重建后标记 migration 为 fake（Django 不再重复建表）
 python manage.py migrate --fake --settings=k8s_console.settings_dev
 ```
 
@@ -97,6 +103,10 @@ python manage.py shell --settings=k8s_console.settings_dev
 ### 7. 启动开发服务器
 
 ```bash
+# Dev（需先 export DJANGO_SETTINGS_MODULE=k8s_console.settings_dev）
+python manage.py runserver 0.0.0.0:8000
+
+# 或显式指定
 python manage.py runserver 0.0.0.0:8000 --settings=k8s_console.settings_dev
 ```
 

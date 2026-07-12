@@ -13,11 +13,12 @@ Vue 3 单页面应用，K8s 集群管理的 Web 控制台。
 
 ```
 /                   📊 集群概览（Dashboard）
-/resources/:type    📦 资源列表（13 种资源类型）
+/resources          📦 统一资源管理（页面内选择 14 种资源类型）
 /apply              🛠 Apply YAML 在线编辑
 /users              👤 用户管理（仅 admin）
 /audit              📋 审计日志（仅 admin）
 /login              🔐 登录页
+/clusters           🖥 集群管理（admin）
 ```
 
 ## 本地开发
@@ -42,22 +43,33 @@ npm run dev
 
 启动后访问 `http://localhost:3000`。
 
-### 3. 后端 API 代理
+### 3. 后端 API 代理（Dev / Prd 配置）
 
-开发模式下，Vite 自动将 `/api` 请求代理到后端 `http://localhost:8000`。无需额外配置。
+项目通过 `.env` 文件区分开发和生产环境：
 
-如需修改后端地址，编辑 `vite.config.js`：
+| 文件 | 环境 | 说明 |
+|------|------|------|
+| `.env.development` | `npm run dev` | Vite 启动时自动加载 |
+| `.env.production` | `npm run build` | Vite build 时自动加载 |
+| `.env.local` | 本地覆盖（不提交） | 可选，覆盖以上两个文件 |
 
-```js
-server: {
-  proxy: {
-    "/api": {
-      target: "http://localhost:8000",  // 修改为你的后端地址
-      changeOrigin: true,
-    },
-  },
-},
+**开发模式**（`npm run dev`）：
+Vite 自动将 `/api` 请求代理到 `VITE_API_TARGET` 指定的后端地址：
+
+```bash
+# .env.development 默认值
+VITE_API_TARGET=http://localhost:8000
 ```
+
+如需让前端直连 K8s 部署的后端（跳过本地 Django），修改 `.env.local`：
+
+```bash
+# frontend/.env.local（本地覆盖，不提交 git）
+VITE_API_TARGET=http://localhost:30000
+```
+
+**生产模式**（`npm run build`）：
+无需 proxy —— K8s Ingress 按路径路由 `/api` → backend、`/` → frontend。nginx 只 serve 静态文件。
 
 ## 前后端联调
 
@@ -132,12 +144,15 @@ Django dev server (http://localhost:8000)
 展示集群概况：Namespace、Deployment、Pod、Service、Ingress 的数量统计。
 
 ### 资源管理
-13 种资源类型，每种资源支持：
+统一页面 `/resources`，页面内通过下拉框选择 14 种资源类型。每种资源支持：
 - **列表查看** — 按 namespace 过滤
+- **资源名称模糊搜索** — 前端实时过滤
 - **YAML 查看** — 只读弹窗 + 语法高亮 + 一键复制
 - **Scale** — Deployment/StatefulSet 扩缩容（弹窗确认）
 - **Rollback** — Deployment 版本回滚（可选指定 revision）
 - **Delete** — 删除资源（需输入资源名确认）
+
+> 集群级别资源（Namespace/ClusterRole/ClusterRoleBinding）自动隐藏 Namespace 列和 Namespace 筛选器。
 
 ### Apply YAML
 左侧 YAML 编辑器 + 右侧 Apply 按钮和结果面板。支持在线编辑或粘贴 YAML，点击 Apply 提交到后端执行。
@@ -190,7 +205,7 @@ frontend/
     └── views/
         ├── LoginPage.vue       # 登录页
         ├── DashboardPage.vue   # 集群概览
-        ├── ResourceListPage.vue # 通用资源列表（13种资源复用）
+        ├── ResourceListPage.vue # 统一资源管理（14种资源，页面内切换）
         ├── ApplyYamlPage.vue   # YAML 编辑器 + Apply
         ├── UserManagementPage.vue # 用户管理（admin）
         └── AuditLogPage.vue    # 审计日志（admin）

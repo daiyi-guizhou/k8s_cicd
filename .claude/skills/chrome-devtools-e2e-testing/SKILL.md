@@ -129,12 +129,13 @@ F1 登录
 http://localhost:3000/
 ├── /login                          LoginPage.vue
 ├── /                               DashboardPage.vue
-├── /resources/:type                ResourceListPage.vue
+├── /resources                      ResourceListPage.vue
 │   ├── ScaleModal.vue              (deployment / statefulset)
 │   ├── DeleteModal.vue             (除 namespace 外)
 │   ├── RollbackModal.vue           (仅 deployment)
 │   └── YamlModal.vue               (所有类型)
 ├── /apply                          ApplyYamlPage.vue
+├── /clusters                       ClusterManagementPage.vue (admin)
 ├── /users                          UserManagementPage.vue (admin)
 └── /audit                          AuditLogPage.vue (admin)
 ```

@@ -283,6 +283,8 @@ k8s_cicd/
 
 ## 本地开发
 
+项目维护两套配置：`dev`（本地启动测试）和 `prd`（构建镜像部署 K8s）。
+
 ### 后端开发
 
 ```bash
@@ -295,12 +297,11 @@ pip install -r requirements.txt
 kubectl port-forward -n database svc/mysql 3306:3306 &
 kubectl port-forward -n database svc/redis 6379:6379 &
 
-# 初始化数据库
-python manage.py migrate --settings=k8s_console.settings_dev
-python manage.py init_admin --settings=k8s_console.settings_dev
-
-# 启动开发服务器
-python manage.py runserver 0.0.0.0:8000 --settings=k8s_console.settings_dev
+# Dev 环境 — 覆盖 DB/Redis 为 127.0.0.1
+export DJANGO_SETTINGS_MODULE=k8s_console.settings_dev
+python manage.py migrate
+python manage.py init_admin
+python manage.py runserver 0.0.0.0:8000
 ```
 
 ### 前端开发
@@ -310,9 +311,22 @@ cd frontend
 npm install
 npm run dev
 # 访问 http://localhost:3000
+# API 代理目标由 .env.development 的 VITE_API_TARGET 控制（默认 http://localhost:8000）
 ```
 
-> 入门登录: 用户名 `admin`，密码 `admin`（通过 `init_admin` + Django shell 设置）
+### 环境配置速查
+
+| 配置文件 | 环境 | 切换方式 |
+|----------|------|----------|
+| `backend/k8s_console/settings_dev.py` | Dev | `export DJANGO_SETTINGS_MODULE=k8s_console.settings_dev` |
+| `backend/k8s_console/settings.py` | Prd（默认） | 不设或 `k8s_console.settings` |
+| `frontend/.env.development` | Dev | `npm run dev` 自动加载 |
+| `frontend/.env.production` | Prd | `npm run build` 自动加载 |
+| `frontend/.env.local` | 本地覆盖 | 优先级最高，已 `.gitignore` |
+
+> 前端 Dev 如需直连 K8s 后端（跳过本地 Django），在 `frontend/.env.local` 中设 `VITE_API_TARGET=http://localhost:30000`。
+>
+> 入门登录: 用户名 `admin`，密码 `admin`
 
 ---
 

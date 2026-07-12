@@ -41,25 +41,37 @@
 
 ---
 
-## F3. 资源列表
+## F3. 统一资源管理页
 
 **页面/组件：** `ResourceListPage.vue`、`api/resources.js`
 
-### F3.1 通用
+**路由：** `/resources`（不再用 `/resources/:type`）
 
-- [ ] 页面标题 "📦 {资源类型中文名}"
-- [ ] 数据以表格展示，列随资源类型变化
-- [ ] 无数据时显示 "暂无资源"
+### F3.1 资源类型选择器
+
+- [ ] 页面显示 "📦 资源管理" 标题
+- [ ] 三个过滤器并排：资源类型（搜索下拉框）、Namespace（搜索下拉框）、资源名称（文本输入框）
+- [ ] 资源类型下拉框分为两段：⭐ 常用（Deployment/Pod/Service）+ 📋 其他（其余类型按字母序）
+- [ ] 下拉框支持键盘输入模糊匹配过滤
+- [ ] 下拉框支持 ↑↓ 键盘导航 + Enter 选中
+- [ ] 资源类型下拉框旁显示资源数量（如 "Deployment (5)"）
+- [ ] 切换资源类型后 Namespace 筛选重置为 "全部"
 - [ ] 加载中显示 "加载中..."
 - [ ] API 失败时显示红色错误信息
+- [ ] 无数据时显示 "暂无资源"
 
 ### F3.2 Namespace 筛选
 
-- [ ] 命名空间级别资源，顶部显示 namespace 筛选标签（"全部" + 各 namespace 名）
-- [ ] 点击某 namespace 标签 → 列表只显示该 namespace 资源
-- [ ] 当前选中标签有视觉高亮
-- [ ] 集群级别资源（namespace、clusterrole、clusterrolebinding）不显示筛选标签
+- [ ] 命名空间级别资源，Namespace 下拉框列出 "全部" + 所有 namespace
+- [ ] Namespace 下拉框支持输入模糊匹配
+- [ ] 集群级别资源（namespace、clusterrole、clusterrolebinding）不显示 Namespace 筛选器
 - [ ] 切换资源类型时筛选重置为 "全部"
+
+### F3.3 资源名称搜索
+
+- [ ] 输入文字后前端实时过滤（无需点击搜索按钮）
+- [ ] URL query 参数同步：`/resources?type=pod&search=redis`
+- [ ] 清空搜索框后恢复显示全部
 
 ### F3.3 各资源类型表格列
 
@@ -153,8 +165,8 @@
 - [ ] 侧边栏固定在左侧，深色背景
 - [ ] 顶部品牌名 "☸️ K8s Console"
 - [ ] 品牌名下方有集群选择下拉框（F12）
-- [ ] 导航项：仪表盘、🖥 集群管理、资源管理分组（14 种资源）、Apply YAML
-- [ ] admin 额外显示：用户管理、审计日志
+- [ ] 导航项：仪表盘、🖥 集群管理、📦 资源管理、🛠 Apply YAML
+- [ ] admin 额外显示：👤 用户管理、📋 审计日志
 - [ ] 当前页面对应的导航项高亮
 - [ ] 底部显示用户名和 "登出" 按钮
 
@@ -164,7 +176,7 @@
 |------|------|------|
 | `/login` | 登录 | 公开 |
 | `/` | 仪表盘 | 需登录 |
-| `/resources/:type` | 资源列表 | 需登录 |
+| `/resources` | 统一资源管理 | 需登录 |
 | `/apply` | Apply YAML | 需登录 |
 | `/clusters` | 集群管理 | admin |
 | `/users` | 用户管理 | admin |
@@ -188,7 +200,7 @@
 **页面/组件：** `router/index.js`（beforeEach）
 
 - [ ] 无 token 访问 `/` → 跳转 `/login`
-- [ ] 无 token 访问 `/resources/deployment` → 跳转 `/login`
+- [ ] 无 token 访问 `/resources` → 跳转 `/login`
 - [ ] 无 token 访问 `/users` → 跳转 `/login`
 - [ ] 有 token 访问 `/login` → 跳转 `/`
 - [ ] 非 admin 访问 `/users` → 跳转 `/`

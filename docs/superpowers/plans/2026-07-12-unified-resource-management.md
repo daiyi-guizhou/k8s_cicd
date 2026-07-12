@@ -1,3 +1,103 @@
+# 统一资源管理页面 — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 将侧边栏 14 个独立资源类型链接合并为 1 个统一的资源管理页面（`/resources`），在页面内通过下拉框选择资源类型。
+
+**Architecture:** 纯前端重构 — 后端 API 零改动。路由从 `/resources/:type` 改为 `/resources`（使用 query 参数保持状态），侧边栏从 14 项减为 1 项，ResourceListPage 增加资源类型/Namespace/名称三个过滤器。
+
+**Tech Stack:** Vue 3 (Composition API), Vue Router, no UI library
+
+---
+
+### Task 1: 修改路由 — `/resources/:type` → `/resources`
+
+**Files:**
+- Modify: `frontend/src/router/index.js:18`
+
+- [ ] **Step 1: 改路由定义**
+
+将 `path: "/resources/:type"` 改为 `path: "/resources"`：
+
+```javascript
+// frontend/src/router/index.js, line 18
+// OLD:
+//   path: "/resources/:type",
+//   name: "ResourceList",
+// NEW:
+  {
+    path: "/resources",
+    name: "Resources",
+    component: () => import("../views/ResourceListPage.vue"),
+    meta: { requiresAuth: true },
+  },
+```
+
+- [ ] **Step 2: 验证路由生效**
+
+启动前端 dev server，访问 `http://localhost:5173/resources`（不带 type 参数），确认 ResourceListPage 组件正常渲染。
+
+---
+
+### Task 2: 简化侧边栏 — 14 项 → 1 项
+
+**Files:**
+- Modify: `frontend/src/components/AppSidebar.vue:31-40`
+
+- [ ] **Step 1: 替换模板中的资源子菜单**
+
+删除 14 个 `router-link` 资源类型循环，替换为单个链接：
+
+```html
+<!-- OLD (lines 31-40):
+    <div class="sidebar-section-label">📦 资源管理</div>
+    <router-link
+      v-for="r in resourceTypes"
+      :key="r.type"
+      :to="`/resources/${r.type}`"
+      class="sidebar-item sidebar-sub"
+      active-class="active"
+    >
+      {{ r.label }}
+    </router-link>
+-->
+<!-- NEW: -->
+    <router-link to="/resources" class="sidebar-item" active-class="active">
+      📦 资源管理
+    </router-link>
+```
+
+- [ ] **Step 2: 删除不再需要的 resourceTypes 数组**
+
+删除 `<script setup>` 中的 `resourceTypes` 数组定义（lines 78-93）：
+
+```javascript
+// DELETE these lines (78-93):
+// const resourceTypes = [
+//   { type: "namespace", label: "Namespace" },
+//   { type: "deployment", label: "Deployment" },
+//   { type: "pod", label: "Pod" },
+//   ...
+//   { type: "serviceaccount", label: "ServiceAccount" },
+// ];
+```
+
+- [ ] **Step 3: 检查完整文件**
+
+确认 AppSidebar.vue 模板中：
+- `sidebar-section-label` 和 `sidebar-sub` 相关行已删除
+- 只有一个 `📦 资源管理` 的 `router-link to="/resources"`
+
+---
+
+### Task 3: 重写 ResourceListPage — 三个过滤器 + 动态表格
+
+**Files:**
+- Modify: `frontend/src/views/ResourceListPage.vue`（完全重写）
+
+- [ ] **Step 1: 替换模板**
+
+```html
 <template>
   <div>
     <h2 style="margin-bottom:16px;">📦 资源管理</h2>
@@ -127,9 +227,13 @@
       @close="yamlVisible = false" />
   </div>
 </template>
+```
 
+- [ ] **Step 2: 替换 script setup**
+
+```javascript
 <script setup>
-import { ref, computed, watch, onMounted, inject } from "vue";
+import { ref, computed, watch, onMounted, inject, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { listResources, getResourceYaml, scaleResource, rollbackDeployment, deleteResource } from "../api/resources";
 import ScaleModal from "../components/ScaleModal.vue";
@@ -315,7 +419,7 @@ function hideNsDropdown() {
 }
 
 function moveNsHighlight(dir) {
-  const total = filteredNamespaces.value.length + 1;
+  const total = filteredNamespaces.value.length + 1; // +1 for "全部"
   nsHighlightIndex.value = Math.max(0, Math.min(total - 1, nsHighlightIndex.value + dir));
 }
 
@@ -361,8 +465,10 @@ async function fetchData() {
   error.value = "";
   try {
     const ns = currentNamespace.value === "全部" ? undefined : currentNamespace.value;
-    const isClusterScoped = CLUSTER_SCOPED.includes(currentType.value);
-    const res = await listResources(currentType.value, isClusterScoped ? undefined : ns);
+    if (CLUSTER_SCOPED.includes(currentType.value)) {
+      // cluster-scoped resources ignore namespace
+    }
+    const res = await listResources(currentType.value, CLUSTER_SCOPED.includes(currentType.value) ? undefined : ns);
     items.value = res.data?.items || [];
     // Update count for current type
     const opt = resourceTypeOptions.find(o => o.type === currentType.value);
@@ -390,7 +496,7 @@ async function fetchAllCounts() {
       const res = await listResources(opt.type, undefined);
       opt.count = res.data?.count ?? 0;
     } catch (e) {
-      opt.count = null;
+      opt.count = null; // null = hide count on error
     }
   });
   await Promise.allSettled(promises);
@@ -474,11 +580,18 @@ onMounted(() => {
   fetchData();
 });
 
+// Watch: resource type changes → sync URL + refetch
 watch(currentType, () => {
   syncQuery();
 });
-</script>
 
+// Watch: namespace changes → sync URL + refetch (handled in selectNamespace)
+</script>
+```
+
+- [ ] **Step 3: 替换 style**
+
+```css
 <style scoped>
 .toolbar {
   display: flex;
@@ -562,3 +675,24 @@ watch(currentType, () => {
   margin-right: 4px;
 }
 </style>
+```
+
+- [ ] **Step 4: 验证功能**
+
+启动前端 dev server：
+```bash
+cd D:/project/k8s_cicd/k8s_cicd/frontend && npm run dev
+```
+
+验证清单：
+1. 访问 `/resources`，默认选中 Deployment，表格显示 Deployment 列表
+2. 资源类型下拉框：常用（Deployment、Pod、Service）在前，有 ⭐ 标记，其余按字母序
+3. 在下拉框中输入 "dep" → 只显示 Deployment
+4. 输入 "role" → 显示 Role、ClusterRole、ClusterRoleBinding（字母序）
+5. 切换资源类型 → 表格列、操作按钮、Namespace 过滤器（集群级隐藏）动态变化
+6. Namespace 下拉框：支持搜索
+7. 资源名称输入框：输入文字后表格实时过滤
+8. 刷新页面 → URL query 恢复状态，过滤器值不变
+9. YAML / Scale / Rollback / 删除弹窗正常工作
+10. 侧边栏只有 1 个 "📦 资源管理"
+11. 旧路由 `/resources/deployment` 等不再可访问

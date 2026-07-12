@@ -28,15 +28,8 @@
       📊 仪表盘
     </router-link>
 
-    <div class="sidebar-section-label">📦 资源管理</div>
-    <router-link
-      v-for="r in resourceTypes"
-      :key="r.type"
-      :to="`/resources/${r.type}`"
-      class="sidebar-item sidebar-sub"
-      active-class="active"
-    >
-      {{ r.label }}
+    <router-link to="/resources" class="sidebar-item" active-class="active">
+      📦 资源管理
     </router-link>
 
     <div class="sidebar-divider"></div>
@@ -74,23 +67,6 @@ const selectedClusterId = ref(clusterStore.currentId);
 function onClusterChange() {
   clusterStore.selectCluster(selectedClusterId.value);
 }
-
-const resourceTypes = [
-  { type: "namespace", label: "Namespace" },
-  { type: "deployment", label: "Deployment" },
-  { type: "pod", label: "Pod" },
-  { type: "service", label: "Service" },
-  { type: "ingress", label: "Ingress" },
-  { type: "daemonset", label: "DaemonSet" },
-  { type: "statefulset", label: "StatefulSet" },
-  { type: "configmap", label: "ConfigMap" },
-  { type: "secret", label: "Secret" },
-  { type: "role", label: "Role" },
-  { type: "rolebinding", label: "RoleBinding" },
-  { type: "clusterrole", label: "ClusterRole" },
-  { type: "clusterrolebinding", label: "ClusterRoleBinding" },
-  { type: "serviceaccount", label: "ServiceAccount" },
-];
 
 async function doLogout() {
   try { await logout(); } catch (e) { /* ignore */ }

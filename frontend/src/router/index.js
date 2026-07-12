@@ -15,8 +15,8 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: "/resources/:type",
-    name: "ResourceList",
+    path: "/resources",
+    name: "Resources",
     component: () => import("../views/ResourceListPage.vue"),
     meta: { requiresAuth: true },
   },
