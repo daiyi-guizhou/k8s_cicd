@@ -135,6 +135,7 @@ http://localhost:3000/
 │   ├── RollbackModal.vue           (仅 deployment)
 │   └── YamlModal.vue               (所有类型)
 ├── /apply                          ApplyYamlPage.vue
+├── /deploy                         DeployManagementPage.vue
 ├── /clusters                       ClusterManagementPage.vue (admin)
 ├── /users                          UserManagementPage.vue (admin)
 └── /audit                          AuditLogPage.vue (admin)

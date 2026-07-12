@@ -191,6 +191,36 @@ curl -s -X POST http://localhost:8000/api/auth/logout \
 | error_msg | TextField | 错误信息 (v1.1 新增) |
 | created_at | DateTimeField | 操作时间 |
 
+### app_project (v1.2 新增 CI/CD 部署)
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| id | AutoField | 主键 |
+| app_name | CharField(128) | 唯一应用标识 |
+| app_type | CharField(20) | `django` / `vue` |
+| local_path | CharField(512) | 宿主机源码路径 |
+| domain | CharField(255) | 访问域名 |
+| ingress_path | CharField(256) | Ingress 路由路径（默认 Django=`/api`, Vue=`/`） |
+| port | IntegerField | 容器端口 |
+| replicas | IntegerField | 副本数（默认 1） |
+| namespace | CharField(100) | K8s 命名空间（默认 `prd`） |
+| cluster | FK → cluster | 目标集群 |
+| enabled | BooleanField | 是否启用 |
+| created_at | DateTimeField | 创建时间 |
+| updated_at | DateTimeField | 更新时间 |
+
+### deploy_history (v1.2 新增 CI/CD 部署)
+
+| 列 | 类型 | 说明 |
+|----|------|------|
+| id | AutoField | 主键 |
+| project | FK → app_project | 所属项目 |
+| tag | CharField(128) | 部署 tag（镜像版本） |
+| status | CharField(20) | `building` / `deploying` / `success` / `failed` |
+| operator | FK → user | 操作人 |
+| message | TextField | 状态信息/错误详情 |
+| created_at | DateTimeField | 部署时间 |
+
 ## API 概览
 
 所有 API 使用 POST 方法，JSON body 传参。统一响应格式：
@@ -235,6 +265,13 @@ curl -s -X POST http://localhost:8000/api/auth/logout \
 | 集群管理 | `/api/clusters/update` | 管理员编辑集群 |
 | 集群管理 | `/api/clusters/delete` | 管理员删除集群 |
 | 集群管理 | `/api/clusters/test` | 测试集群连接 |
+| CI/CD 部署 | `/api/deploy/projects` | 列出部署项目 |
+| CI/CD 部署 | `/api/deploy/project/create` | 管理员创建部署项目 |
+| CI/CD 部署 | `/api/deploy/project/update` | 管理员更新部署项目 |
+| CI/CD 部署 | `/api/deploy/project/delete` | 管理员删除部署项目 |
+| CI/CD 部署 | `/api/deploy/trigger` | 管理员触发一键部署 |
+| CI/CD 部署 | `/api/deploy/rollback` | 管理员回滚到指定 tag |
+| CI/CD 部署 | `/api/deploy/history` | 查看部署历史 |
 
 ### 支持的资源类型
 
@@ -272,9 +309,16 @@ backend/
 │       ├── models.py         # AuditLog
 │       ├── views.py          # 审计日志查询
 │       └── urls.py
-└── utils/
-    ├── response.py           # 统一 JSON 响应格式
-    └── k8s_helper.py         # K8s 错误包装
+├── apps/
+│   ├── deploy/               # CI/CD 自动化部署
+│   │   ├── models.py         # AppProject, DeployHistory
+│   │   ├── views.py          # 项目管理 + 部署触发 + 回滚
+│   │   ├── urls.py
+│   │   ├── yaml_gen.py       # K8s YAML 生成 (Deployment/Service/Ingress)
+│   │   └── migrations/       # 数据库迁移
+│   └── utils/
+│       ├── response.py       # 统一 JSON 响应格式
+│       └── k8s_helper.py     # K8s 错误包装
 ```
 
 ## Docker 构建

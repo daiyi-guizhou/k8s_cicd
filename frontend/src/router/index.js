@@ -44,6 +44,12 @@ const routes = [
     component: () => import("../views/AuditLogPage.vue"),
     meta: { requiresAuth: true, requiresAdmin: true },
   },
+  {
+    path: "/deploy",
+    name: "DeployManagement",
+    component: () => import("../views/DeployManagementPage.vue"),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({

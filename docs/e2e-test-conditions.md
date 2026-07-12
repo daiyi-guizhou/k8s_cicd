@@ -165,7 +165,7 @@
 - [ ] 侧边栏固定在左侧，深色背景
 - [ ] 顶部品牌名 "☸️ K8s Console"
 - [ ] 品牌名下方有集群选择下拉框（F12）
-- [ ] 导航项：仪表盘、🖥 集群管理、📦 资源管理、🛠 Apply YAML
+- [ ] 导航项：仪表盘、🖥 集群管理、📦 资源管理、🛠 Apply YAML、🚀 CI/CD 部署
 - [ ] admin 额外显示：👤 用户管理、📋 审计日志
 - [ ] 当前页面对应的导航项高亮
 - [ ] 底部显示用户名和 "登出" 按钮
@@ -178,6 +178,7 @@
 | `/` | 仪表盘 | 需登录 |
 | `/resources` | 统一资源管理 | 需登录 |
 | `/apply` | Apply YAML | 需登录 |
+| `/deploy` | CI/CD 部署 | 需登录 |
 | `/clusters` | 集群管理 | admin |
 | `/users` | 用户管理 | admin |
 | `/audit` | 审计日志 | admin |
@@ -195,6 +196,117 @@
 
 ---
 
+## F15. CI/CD 部署管理
+
+**页面/组件：** `DeployManagementPage.vue`、`api/deploy.js`
+
+**后端接口：** `apps/deploy/views.py`、`apps/deploy/models.py`、`apps/deploy/yaml_gen.py`
+
+**Builder 服务：** `builder/main.py`（Flask，127.0.0.1:9008）、`builder/build_runner.py`
+
+**路由：** `/deploy`（需登录，所有用户可查看操作按钮仅 admin 可见）
+
+### F15.1 页面布局
+
+- [ ] 页面标题 "🚀 CI/CD 部署管理"
+- [ ] 左侧 300px 项目列表面板，右侧部署操作面板
+- [ ] 左侧显示 "项目列表" 标题和 "+ 新增项目" 按钮（仅 admin 可见）
+- [ ] 左侧未选项目时右侧显示 "← 请从左侧选择一个项目"
+- [ ] 项目列表项显示：应用名称、类型标签（Django 蓝色 / Vue 绿色）、域名、启用状态
+- [ ] "🚀 CI/CD 部署" 侧边栏导航项对所有已登录用户可见
+
+### F15.2 新增项目（仅 admin）
+
+- [ ] 点击 "+ 新增项目" 弹出模态框，标题 "新增项目"
+- [ ] 表单字段：应用名称 *、应用类型 *（Django/Vue 下拉）、本地代码路径 *（支持 Windows 路径如 `D:/path/to/project`）、访问域名 *、Ingress Path（Django 默认 `/api`，Vue 默认 `/`）、容器端口（默认 8000）、副本数（默认 1）、命名空间（默认 prd）、目标集群 *、启用复选框
+- [ ] 必填字段（app_name、domain、local_path、cluster_id）未填时 "创建" 按钮禁用
+- [ ] 提交成功后 Toast 显示 "项目已创建"（通过 toastShow 函数，支持 inject fallback 到 window custom event），列表刷新
+- [ ] 提交失败时显示红色错误信息
+
+### F15.3 编辑项目（仅 admin）
+
+- [ ] 选中项目后在右侧信息卡片显示 "✏ 编辑" 按钮
+- [ ] 点击后弹出模态框，预填当前项目信息
+- [ ] app_name 字段在编辑模式下禁用（不可修改主键）
+- [ ] 提交成功后 Toast "项目已更新"，列表刷新
+
+### F15.4 删除项目（仅 admin）
+
+- [ ] 选中项目后右侧信息卡片显示 "🗑 删除" 红色按钮
+- [ ] 点击后弹出确认模态框："确认删除" + 提示 "此操作仅删除控制台中的项目配置，不影响已部署的 K8s 资源"
+- [ ] 确认后执行删除，Toast "项目已删除"
+- [ ] 若删除的是当前选中项目，右侧面板回到占位提示
+
+### F15.5 一键部署（仅 admin）
+
+- [ ] 选中项目后右侧显示 "一键部署" 卡片
+- [ ] 包含 Tag 输入框（placeholder "例如: v1.2.0"）和 "🚀 一键部署" 按钮
+- [ ] Tag 为空时按钮 disabled
+- [ ] 点击部署后按钮 disabled + 文案变为 "部署中..."
+- [ ] 部署期间历史列表顶部出现 "building" 状态记录
+- [ ] 部署成功 Toast "部署成功"（绿色），部署历史刷新，Tag 输入框清空
+- [ ] 部署失败显示红色错误信息，历史记录状态变为 "failed"
+
+### F15.6 部署历史
+
+- [ ] 选中项目后右侧显示 "部署历史" 卡片
+- [ ] 表格列：Tag、状态、操作人、时间、操作
+- [ ] 状态标签区分：building（蓝/构建中）、deploying（蓝/部署中）、success（绿/成功）、failed（红/失败）
+- [ ] 成功状态的记录显示 "🔄 回滚" 按钮（仅 admin 可见）
+- [ ] 无历史时显示 "暂无部署历史"
+- [ ] 历史列表按创建时间倒序排列（最新在前）
+
+### F15.7 回滚（仅 admin）
+
+- [ ] 点击 "🔄 回滚" 弹出确认模态框，提示 "确定要将 {app_name} 回滚到 {tag} 吗？"
+- [ ] 确认后执行回滚，按钮显示 "回滚中..."
+- [ ] 回滚成功 Toast "回滚成功"（绿色），历史刷新
+- [ ] 回滚失败 Toast 显示错误信息
+- [ ] ⚠️ K8s Pod 环境下 docker 命令不可用 → FileNotFoundError 自动放行（允许回滚）
+
+### F15.8 权限控制
+
+- [ ] 非 admin 用户可访问 `/deploy` 查看项目列表和历史
+- [ ] 非 admin 用户不显示 "+ 新增项目" 按钮
+- [ ] 非 admin 用户选中项目后不显示编辑/删除按钮
+- [ ] 非 admin 用户选中项目后不显示 "一键部署" 卡片
+- [ ] 非 admin 用户选中项目后在历史中不显示 "🔄 回滚" 按钮
+
+### F15.9 侧边栏
+
+- [ ] 侧边栏显示 "🚀 CI/CD 部署" 导航项（所有已登录用户可见）
+- [ ] 当前在 `/deploy` 时导航项高亮（active class）
+- [ ] 点击导航到 `/deploy`
+
+### F15.10 Builder Service（后端）
+
+- [ ] `POST /api/build` 接收 `{app_name, app_type, tag, local_path}` 返回 `{code, message, data}`
+- [ ] 路径遍历保护：`ALLOWED_PATH_PREFIXES` 白名单验证（含 Windows 盘符 `D:\\`, `C:\\`）
+- [ ] 不支持的应用类型返回 400
+- [ ] `GET /api/health` 返回 `{"status":"ok"}`
+- [ ] 12. Docker 构建超时 600s 后返回错误（`subprocess.TimeoutExpired` 捕获）
+- [ ] start_app.sh 验证：项目必须包含此文件，否则报错
+
+### F15.11 K8s YAML 生成
+
+- [ ] Django 项目生成 tcpSocket 探针 + 100m/128Mi 资源请求
+- [ ] Vue 项目生成 httpGet 探针 + 50m/64Mi 资源请求
+- [ ] 两种类型均生成 Deployment + Service(ClusterIP) + Ingress(nginx)
+- [ ] `imagePullPolicy: IfNotPresent`（本地 Docker Desktop 模式）
+- [ ] 环境变量注入 `APP_NAME` 和 `APP_TAG`
+- [ ] 非法 app_type 抛出 ValueError
+
+### F15.12 K8s Pod 环境适配（生产验证）
+
+- [ ] Pod 内通过 `127.0.0.1`（host.docker.internal）访问宿主机 Builder Service
+- [ ] ConfigMap `BUILDER_SERVICE_URL` 设置为 `http://127.0.0.1`
+- [ ] 回滚时 docker 命令不可用 → 自动跳过本地镜像检查
+- [ ] 部署的项目 Pod 内 `APP_NAME`/`APP_TAG` 环境变量正确注入
+- [ ] 部署的项目 Pod 内 `start_app.sh` 正常执行（migrate → gunicorn/nginx）
+- [ ] 部署后可通过域名访问（如 `backend-app.daiyi.local.com:9001/api/health`）
+
+---
+
 ## F9. 路由守卫
 
 **页面/组件：** `router/index.js`（beforeEach）
@@ -202,6 +314,7 @@
 - [ ] 无 token 访问 `/` → 跳转 `/login`
 - [ ] 无 token 访问 `/resources` → 跳转 `/login`
 - [ ] 无 token 访问 `/users` → 跳转 `/login`
+- [ ] 无 token 访问 `/deploy` → 跳转 `/login`
 - [ ] 有 token 访问 `/login` → 跳转 `/`
 - [ ] 非 admin 访问 `/users` → 跳转 `/`
 - [ ] 非 admin 访问 `/audit` → 跳转 `/`
@@ -250,7 +363,7 @@ F14（全部 9 项自检脚本）
 ### 完整回归
 
 ```
-F1 → F2 → F3(全部子项) → F4 → F5 → F6 → F7 → F8 → F9 → F10 → F11 → F12 → F13 → F14
+F1 → F2 → F3(全部子项) → F4 → F5 → F6 → F7 → F8 → F9 → F10 → F11 → F12 → F13 → F14 → F15
 ```
 
 ### 测试注意事项

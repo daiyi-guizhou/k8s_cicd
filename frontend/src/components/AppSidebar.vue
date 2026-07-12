@@ -37,6 +37,13 @@
     <router-link to="/apply" class="sidebar-item" active-class="active">
       🛠 Apply YAML
     </router-link>
+
+    <div class="sidebar-divider"></div>
+
+    <router-link to="/deploy" class="sidebar-item" active-class="active">
+      🚀 CI/CD 部署
+    </router-link>
+
     <router-link to="/users" v-if="auth.isAdmin" class="sidebar-item" active-class="active">
       👤 用户管理
     </router-link>

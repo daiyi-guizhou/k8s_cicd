@@ -15,6 +15,7 @@ Vue 3 单页面应用，K8s 集群管理的 Web 控制台。
 /                   📊 集群概览（Dashboard）
 /resources          📦 统一资源管理（页面内选择 14 种资源类型）
 /apply              🛠 Apply YAML 在线编辑
+/deploy             🚀 CI/CD 部署管理（仅 admin 可操作）
 /users              👤 用户管理（仅 admin）
 /audit              📋 审计日志（仅 admin）
 /login              🔐 登录页
@@ -157,6 +158,10 @@ Django dev server (http://localhost:8000)
 ### Apply YAML
 左侧 YAML 编辑器 + 右侧 Apply 按钮和结果面板。支持在线编辑或粘贴 YAML，点击 Apply 提交到后端执行。
 
+### CI/CD 部署管理
+左侧项目列表 + 右侧部署操作面板。支持项目注册（配置源码路径、域名、Ingress 路由等）、一键部署（输入 tag → 构建镜像 → 生成 YAML → apply）、部署历史查看、回滚到任意历史 tag。查看权限对所有用户开放，操作权限仅限 admin。
+> 📖 完整使用指南见 [CI/CD 部署文档](../docs/cicd-deploy.md)
+
 ### 用户管理（admin only）
 创建用户（随机初始密码）、启用/禁用、重置密码。
 
@@ -194,7 +199,9 @@ frontend/
     │   ├── auth.js            # 登录/登出/改密
     │   ├── resources.js       # K8s 资源 CRUD
     │   ├── users.js           # 用户管理
-    │   └── audit.js           # 审计日志
+    │   ├── audit.js           # 审计日志
+    │   ├── deploy.js          # CI/CD 部署管理
+    │   └── clusters.js        # 集群管理
     ├── components/
     │   ├── AppSidebar.vue     # 左侧导航栏
     │   ├── AppToast.vue       # Toast 通知
@@ -207,6 +214,8 @@ frontend/
         ├── DashboardPage.vue   # 集群概览
         ├── ResourceListPage.vue # 统一资源管理（14种资源，页面内切换）
         ├── ApplyYamlPage.vue   # YAML 编辑器 + Apply
+        ├── DeployManagementPage.vue # CI/CD 部署管理（admin 操作）
+        ├── ClusterManagementPage.vue # 集群管理（admin）
         ├── UserManagementPage.vue # 用户管理（admin）
         └── AuditLogPage.vue    # 审计日志（admin）
 ```

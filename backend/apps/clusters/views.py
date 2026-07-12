@@ -4,15 +4,8 @@ from kubernetes import config as k8s_config
 from rest_framework.decorators import api_view
 
 from .models import Cluster
-from utils.response import success, error, ERR_PERMISSION_DENIED, ERR_VALIDATION
-
-
-def _require_admin(user):
-    """Return error response if user is not admin, None otherwise."""
-    from apps.auth_app.models import User
-    if not isinstance(user, User) or user.role != "admin":
-        return error(ERR_PERMISSION_DENIED, "仅管理员可执行此操作")
-    return None
+from utils.response import success, error, ERR_VALIDATION
+from utils.admin_guard import require_admin
 
 
 @api_view(["POST"])
@@ -27,7 +20,7 @@ def cluster_list(request):
 @api_view(["POST"])
 def cluster_create(request):
     """Create a new cluster config."""
-    admin_err = _require_admin(request.user)
+    admin_err = require_admin(request.user)
     if admin_err:
         return admin_err
     name = request.data.get("name", "").strip()
@@ -57,7 +50,7 @@ def cluster_create(request):
 @api_view(["POST"])
 def cluster_update(request):
     """Update cluster config."""
-    admin_err = _require_admin(request.user)
+    admin_err = require_admin(request.user)
     if admin_err:
         return admin_err
     cluster_id = request.data.get("id")
@@ -90,7 +83,7 @@ def cluster_update(request):
 @api_view(["POST"])
 def cluster_delete(request):
     """Delete a cluster config."""
-    admin_err = _require_admin(request.user)
+    admin_err = require_admin(request.user)
     if admin_err:
         return admin_err
     cluster_id = request.data.get("id")

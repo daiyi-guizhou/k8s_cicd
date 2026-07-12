@@ -1,6 +1,7 @@
-"""Middleware: AuditLoggerMiddleware, TokenBlacklistMiddleware, VersionCheckMiddleware, TokenRefreshMiddleware."""
+"""Middleware: ApiLogging, AuditLogger, TokenBlacklist, VersionCheck, TokenRefresh."""
 import json
 import logging
+import time
 from datetime import datetime
 from django.conf import settings
 from django.http import JsonResponse, RawPostDataException
@@ -9,6 +10,63 @@ import redis as _redis
 from django.conf import settings as _settings
 
 logger = logging.getLogger(__name__)
+api_logger = logging.getLogger("api")
+
+
+class ApiLoggingMiddleware:
+    """Log every API request and response — method, URI, params, body, status, duration.
+
+    Register this as the **first** middleware so it wraps the entire stack.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        start = time.monotonic()
+
+        # ---------- request ----------
+        method = request.method
+        uri = request.build_absolute_uri()
+        # GET query params
+        params = dict(request.GET.items()) if request.GET else None
+        # POST / PUT / PATCH body
+        body = None
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            body = request.body  # raw bytes — decode downstream if needed
+
+        try:
+            body_str = body.decode("utf-8") if body else None
+            if body_str and len(body_str) > 2000:
+                body_str = body_str[:2000] + "...<truncated>"
+        except Exception:
+            body_str = "<non-utf8>"
+
+        api_logger.info(
+            ">>> %s %s | params=%s | body=%s",
+            method, uri, params, body_str,
+        )
+
+        # ---------- response ----------
+        response = self.get_response(request)
+
+        elapsed_ms = (time.monotonic() - start) * 1000
+        status_code = response.status_code
+        # Try to log response body for non-2xx or short responses
+        resp_body = ""
+        if hasattr(response, "content"):
+            try:
+                raw = response.content.decode("utf-8")
+                resp_body = raw if len(raw) <= 1000 else raw[:1000] + "...<truncated>"
+            except Exception:
+                resp_body = "<binary>"
+
+        api_logger.info(
+            "<<< %s %s → %s | %.1fms | resp=%s",
+            method, uri, status_code, elapsed_ms, resp_body,
+        )
+
+        return response
 
 def _get_redis():
     return _redis.Redis.from_url(_settings.REDIS_URL, decode_responses=True)

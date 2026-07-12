@@ -18,9 +18,11 @@ INSTALLED_APPS = [
     "apps.resources",
     "apps.audit",
     "apps.clusters",
+    "apps.deploy",
 ]
 
 MIDDLEWARE = [
+    "k8s_console.middleware.ApiLoggingMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
     "k8s_console.middleware.VersionCheckMiddleware",
@@ -90,3 +92,43 @@ K8S_IN_CLUSTER = True
 
 # Audit middleware: paths excluded from audit logging
 AUDIT_EXCLUDE_PATHS = ["/api/auth/login", "/api/auth/logout"]
+
+# Builder Service
+BUILDER_SERVICE_URL = os.environ.get("BUILDER_SERVICE_URL", "http://192.168.1.24:9008")
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "api": {
+            "format": "[%(asctime)s] %(levelname)s %(name)s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "api",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "api.log"),
+            "maxBytes": 10 * 1024 * 1024,  # 10 MB
+            "backupCount": 5,
+            "formatter": "api",
+        },
+    },
+    "loggers": {
+        "api": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

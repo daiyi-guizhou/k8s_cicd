@@ -71,7 +71,17 @@
 │ 依赖:                        │  │                              │
 │  MySQL (mysql.database.svc)  │  │                              │
 │  Redis (redis.database.svc)  │  │                              │
-└──────────────────────────────┘  └─────────────────────────────┘
+└──────┬───────────────────────┘  └─────────────────────────────┘
+       │
+       │ BUILDER_SERVICE_URL=http://192.168.65.254:9008
+       │ (ConfigMap 注入，触发部署时调用 Builder 构建镜像)
+       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Builder Service（宿主机进程，非 K8s Pod）                                       │
+│ 监听: 0.0.0.0:9008 | 启动: cd builder && python main.py                      │
+│ 作用: 接收 build 请求 → 复制源码 → docker build → 产出镜像                      │
+│ 详见: builder/readme.md                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 数据层 (database namespace)                                                   │
@@ -85,6 +95,50 @@
 │   密码: RedisPass2024!                                                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 网络链路逐层解析
+
+浏览器访问 `http://k8s-cicd.daiyi.local.com:9001` 时，请求经过 **4 层网络路由**：
+
+```
+浏览器                  Windows                   Docker                   K8s 集群
+  │                        │                        │                        │
+  │  ① 输入 URL            │                        │                        │
+  │  k8s-cicd.daiyi        │                        │                        │
+  │  .local.com:9001       │                        │                        │
+  │────────────────────────▶                        │                        │
+  │                        │  ② Windows hosts 解析   │                        │
+  │                        │  127.0.0.1              │                        │
+  │                        │  k8s-cicd.daiyi         │                        │
+  │                        │  .local.com             │                        │
+  │                        │                        │                        │
+  │                        │  ③ TCP 127.0.0.1:9001  │                        │
+  │                        │────────────────────────▶                        │
+  │                        │                        │  ④ NGINX 网关容器       │
+  │                        │                        │  k8s-gateway           │
+  │                        │                        │  proxy_pass            │
+  │                        │                        │  host.docker            │
+  │                        │                        │  .internal:30000       │
+  │                        │                        │────────────▶           │
+  │                        │                        │                        │  ⑤ K8s NodePort
+  │                        │                        │                        │  ingress-nginx
+  │                        │                        │                        │  :30000
+  │                        │                        │                        │──────▶
+  │                        │                        │                        │  ⑥ Ingress 规则
+  │                        │                        │                        │  host match →
+  │                        │                        │                        │  Service → Pod
+  │                        │                        │                        │
+```
+
+| 层 | 组件 | 地址 | 作用 |
+|----|------|------|------|
+| ① → ② | **Windows hosts 文件** | `C:\Windows\System32\drivers\etc\hosts` | 将 `*.daiyi.local.com` 解析为 `127.0.0.1`，绕过公网 DNS |
+| ③ | **TCP 连接** | `127.0.0.1:9001` | 连接到 Windows 本机 9001 端口 |
+| ④ | **Docker NGINX 网关** | `k8s-gateway` 容器 | 反向代理到 `host.docker.internal:30000`（Docker Desktop 宿主机地址） |
+| ⑤ | **K8s NodePort** | `ingress-nginx:30000` | ingress-nginx DaemonSet 的 NodePort Service |
+| ⑥ | **K8s Ingress 规则** | `k8s-console` Ingress | 按 `host + path` 路由到对应的 Service（`/api` → backend:8000，`/` → frontend:80） |
+
+> 💡 **为什么用 hosts 而不是真正的 DNS？** 域名 `*.daiyi.local.com` 不是公网注册域名，无法通过公共 DNS 解析。Windows hosts 文件将域名映射到 `127.0.0.1`，浏览器就能"找到"本机的 Docker 网关容器。
 
 ---
 
@@ -124,6 +178,54 @@ bash deploy/deploy-all.sh --clean
 4. 部署 Ingress-NGINX + NodePort（ingress-nginx namespace）
 5. 部署 K8s Console Backend + Frontend + Ingress（prd namespace）
 6. 从 `deploy/kubeconfigs/` 自动注册集群 + 启动本地网关
+
+### 一键部署应用（CI/CD）
+
+部署完成后，可通过 Web 控制台的 **CI/CD 部署** 页面对 Django / Vue 项目进行自动化部署。
+
+```
+                 k8s-cicd.daiyi.local.com/deploy
+                          │
+                浏览器 → 网关 → Ingress → k8s-console-backend Pod
+                                                    │
+                                          ① POST /api/deploy/trigger
+                                          ② 调用 Builder Service 构建镜像
+                                          ③ 生成 K8s YAML
+                                          ④ kubectl apply → 部署到 K8s
+                                                    │
+                                                    ▼
+                                          ┌─────────────────────┐
+                                          │  Builder Service      │
+                                          │  宿主机 :9008         │
+                                          │  docker build ...     │
+                                          │  产出: app:v1.0       │
+                                          └─────────────────────┘
+```
+
+**启动 Builder Service（必须）**:
+
+Builder Service 是独立于 K8s 的**宿主机进程**，负责 Docker 镜像构建。必须在部署前启动：
+
+```bash
+# 在宿主机上（Windows Git Bash / PowerShell）
+cd D:/project/k8s_cicd/k8s_cicd/builder
+pip install flask        # 首次需要安装依赖
+python main.py           # 监听 0.0.0.0:9008
+
+# 验证 Builder 是否正常
+curl http://127.0.0.1:9008/api/health
+# → {"status":"ok"}
+```
+
+> ⚠️ **Builder 启动后不要关闭终端**。如果 Builder 未启动，部署会立即失败（"镜像构建失败"）。
+>
+> **Builder 与 K8s 的关系**: K8s Pod 内没有 Docker daemon，无法执行 `docker build`。Builder Service 必须运行在宿主机上，通过 ConfigMap 中的 `BUILDER_SERVICE_URL=http://192.168.65.254:9008` 让 Pod 访问。详细说明见 [builder/readme.md](builder/readme.md)。
+
+```bash
+# 浏览器访问
+# http://k8s-cicd.daiyi.local.com:9001/deploy
+#    → 注册项目 → 输入 tag → 一键部署
+```
 
 ### 一键清理
 
@@ -182,6 +284,8 @@ bash deploy/gateway/start.sh
 # http://k8s-cicd.daiyi.local.com:9001
 ```
 
+> 💡 **Windows hosts 与 DNS 解析**: `*.daiyi.local.com` 不是公网域名，浏览器无法通过公共 DNS（如 `8.8.8.8`）解析它。Windows hosts 文件本质上是 **本地 DNS 覆盖**——当浏览器请求解析域名时，Windows 先查 hosts 文件，找到匹配行 `127.0.0.1 xxx.daiyi.local.com` 就直接返回 IP，不再请求上游 DNS。DNS → 网关的完整链路见上文 [网络链路逐层解析](#网络链路逐层解析)。
+>
 > 💡 `start.sh` 内置 **NodePort + port-forward 双保险**：优先使用 NodePort 30000，不可达时自动启动 `kubectl port-forward` 兜底。
 >
 > 📖 详细说明见 [docs/本地网关部署指南.md](docs/本地网关部署指南.md)
@@ -195,8 +299,9 @@ bash deploy/gateway/start.sh
 | [docs/K8s集群使用指南.md](docs/K8s集群使用指南.md) | K8s 集群概览、kubectl 命令速查、PV/PVC、Ingress、Dashboard |
 | [docs/数据库部署指南.md](docs/数据库部署指南.md) | MySQL + Redis K8s 部署、连接信息、常用命令 |
 | [docs/本地网关部署指南.md](docs/本地网关部署指南.md) | 完整链路架构、本地网关部署、故障排查 6 项 |
+| [docs/cicd-deploy.md](docs/cicd-deploy.md) | CI/CD 自动化部署 — Django/Vue 项目一键构建部署回滚 |
 | [docs/多集群添加教程.md](docs/多集群添加教程.md) | 添加和管理多个 K8s 集群的教程 |
-| [docs/e2e-test-conditions.md](docs/e2e-test-conditions.md) | E2E 测试用例和验收条件（F1-F13） |
+| [docs/e2e-test-conditions.md](docs/e2e-test-conditions.md) | E2E 测试用例和验收条件（F1-F15） |
 | [backend/README.md](backend/README.md) | 后端开发指南（conda 环境、API 概览、数据库表结构） |
 | [frontend/README.md](frontend/README.md) | 前端开发指南（页面结构、本地开发、组件树） |
 
@@ -222,6 +327,7 @@ k8s_cicd/
 │   │   ├── auth_app/                    # 认证 + 用户管理
 │   │   ├── resources/                   # K8s 资源操作（14 种类型）
 │   │   ├── clusters/                    # 多集群管理 (v1.1)
+│   │   ├── deploy/                      # CI/CD 部署管理（v1.2）
 │   │   └── audit/                       # 审计日志
 │   ├── utils/
 │   │   ├── response.py                  # 统一 JSON 响应格式
@@ -242,6 +348,13 @@ k8s_cicd/
 │       ├── api/                         # Axios API 层 (client + 5 个模块)
 │       ├── components/                  # 6 个可复用组件
 │       └── views/                       # 7 个页面视图
+├── builder/                              # Builder Service（宿主机）— Docker 构建
+│   ├── readme.md                         # 构建流程、API、端口约定、安全设计
+│   ├── main.py                           # Flask 入口，监听 0.0.0.0:9008
+│   ├── build_runner.py                   # 构建逻辑 + 镜像保留策略
+│   └── templates/                        # Django / Vue 标准 Dockerfile
+│       ├── django/Dockerfile
+│       └── vue/Dockerfile
 ├── deploy/                              # K8s 部署清单
 │   ├── deploy-all.sh                    # ingress-nginx + 演示应用一键部署
 │   ├── ingress-nginx/                   # Ingress-NGINX 网关基础设施

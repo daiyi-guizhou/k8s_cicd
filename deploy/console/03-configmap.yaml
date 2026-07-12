@@ -12,3 +12,4 @@ data:
   REDIS_PORT: "6379"
   ADMIN_USERNAME: "admin"
   ADMIN_PASSWORD: "admin"
+  BUILDER_SERVICE_URL: "http://192.168.1.24:9008"
