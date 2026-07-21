@@ -176,7 +176,7 @@ bash deploy/deploy-all.sh --clean
 2. 构建前端镜像（Vue SPA + Nginx）
 3. 部署 MySQL + Redis（database namespace）
 4. 部署 Ingress-NGINX + NodePort（ingress-nginx namespace）
-5. 部署 ELK 日志收集（prd namespace）
+5. 部署日志收集 ELK + Kafka（prd namespace）
 6. 部署 Prometheus 监控（prd namespace）
 7. 部署 K8s Console Backend + Frontend + Ingress（prd namespace）
 8. 从 `deploy/kubeconfigs/` 自动注册集群 + 启动本地网关
@@ -296,8 +296,6 @@ bash deploy/gateway/start.sh
 
 ## 日志与监控
 
-## 日志与监控
-
 部署脚本会自动部署 ELK 日志栈和 Prometheus 监控栈。
 
 ### ELK 日志收集 (prd namespace)
@@ -305,10 +303,14 @@ bash deploy/gateway/start.sh
 | 组件 | 说明 | 访问 |
 |------|------|------|
 | Elasticsearch | 日志存储与搜索引擎 | 内部: elasticsearch.prd.svc:9200 |
-| Fluentd | 容器日志采集 DaemonSet | 自动采集所有 Pod 日志 |
+| Kafka | 消息队列，解耦日志生产与消费 | 内部: kafka-0.kafka.prd.svc:9092 |
+| Filebeat | 日志采集 sidecar（与 Backend 同 Pod）| tail emptyDir → Kafka |
+| Fluentd | Kafka Consumer，写入 ES | Deployment 1 副本 |
 | Kibana | 日志可视化 Web UI | http://kibana.logging.local (需配置 hosts) |
 
-> 浏览器访问 Kibana 前，需在 Windows hosts 中添加: 127.0.0.1 kibana.logging.local
+> **日志采集链路**: Django RotatingFileHandler → /shared/logs/*.json.log (emptyDir) → Filebeat sidecar → Kafka topic `logs.{SERVICE_NAME}` → Fluentd Kafka consumer → Elasticsearch → Kibana
+>
+> Kibana 浏览器访问: http://kibana.logging.local (hosts: 127.0.0.1 kibana.logging.local)
 
 ### Prometheus 监控 (prd namespace)
 
@@ -416,9 +418,12 @@ k8s_cicd/
 │   │   └── 01-prd-app.yaml              # nginx demo (host: myapp.local)
 │   ├── logging/                         # ELK 日志收集部署 (部署到 prd)
 │   │   ├── 02-elasticsearch.yaml        # Elasticsearch 7.17 StatefulSet
-│   │   ├── 03-fluentd.yaml              # Fluentd DaemonSet + RBAC
+│   │   ├── 03-fluentd.yaml.disabled     # 旧 Fluentd DaemonSet (已弃用)
 │   │   ├── 04-kibana.yaml               # Kibana 7.17 Deployment
-│   │   └── 05-kibana-ingress.yaml       # Kibana Ingress 路由
+│   │   ├── 05-kibana-ingress.yaml       # Kibana Ingress 路由
+│   │   ├── 06-kafka.yaml                # Kafka 3.7 StatefulSet (消息队列)
+│   │   ├── 07-filebeat-config.yaml      # Filebeat ConfigMap (sidecar 配置)
+│   │   └── 08-fluentd-kafka-consumer.yaml  # Fluentd Deployment (Kafka → ES)
 │   ├── monitoring/                       # Prometheus 监控部署 (部署到 prd)
 │   │   ├── 02-prometheus.yaml           # Prometheus Deployment + ConfigMap
 │   │   ├── 03-node-exporter.yaml        # Node Exporter DaemonSet
@@ -507,16 +512,16 @@ npm run dev
 | `deploy/gateway/`（原 `deploy/openresty/`） | 已重命名为 gateway/，反映实际使用的 nginx:latest |
 | `deploy/deploy-all.sh` 部署的是演示应用 | 和 k8s-console 控制台应用是两套独立部署；Console 部署见 `deploy/console/` |
 
-## 日志收集 (ELK)
+## 日志收集 (ELK + Kafka)
 
-| 索引 | 用途 |
-|------|------|
-| `k8s-*` | 全量 K8s 容器日志 |
-| `k8s-backend-*` | Django Backend 结构化日志 |
-| `k8s-backend-error-*` | Backend ERROR/CRITICAL/Exception 日志 |
-| `k8s-mysql-*` | MySQL 慢查询和错误日志 |
-| `k8s-redis-*` | Redis 运行日志 |
-| `k8s-nginx-*` | Nginx/Frontend access 和 error 日志 |
+**架构**: RotatingFileHandler → emptyDir → Filebeat sidecar → Kafka → Fluentd → Elasticsearch → Kibana
+
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| 日志文件 | `/shared/logs/{SERVICE_NAME}.json.log` | RotatingFileHandler (50MB × 3) |
+| Kafka Topic | `logs.{SERVICE_NAME}` | 每个服务一个 topic (如 `logs.k8s-console-backend`) |
+| ES 索引 | `k8s-*` | Fluentd 以 logstash_format 写入，按天分片 |
+| Kibana Discover | `k8s-*` 索引模式 | 按 service / request_id / level 过滤 |
 
 **访问**: http://kibana.logging.local (需 hosts: `127.0.0.1 kibana.logging.local`)
 

@@ -40,7 +40,7 @@ K8s Console 一键部署脚本
   Step 2/8: 构建前端镜像 (Vue + Nginx)
   Step 3/8: 部署数据库 (MySQL + Redis)
   Step 4/8: 部署 Ingress-NGINX
-  Step 5/8: 部署日志收集 (ELK - Elasticsearch + Fluentd + Kibana)
+  Step 5/8: 部署日志收集 (ELK - ES + Kafka + Filebeat + Fluentd + Kibana)
   Step 6/8: 部署监控 (Prometheus + Node Exporter + Grafana)
   Step 7/8: 部署 K8s Console (Backend + Frontend + Ingress)
   Step 8/8: 注册集群 + 启动本地网关
@@ -126,7 +126,7 @@ echo "  ✅ ingress-nginx 就绪"
 # ── Step 5/8: 部署日志收集 (ELK)
 echo ""
 echo "=========================================="
-echo "  Step 5/8: 部署日志收集 (ELK — Elasticsearch + Fluentd + Kibana)"
+echo "  Step 5/8: 部署日志收集 (ELK — ES + Kafka + Filebeat + Fluentd + Kibana)"
 echo "=========================================="
 
 # Ensure prd namespace exists (ELK + Monitoring + Console share it)
@@ -135,7 +135,7 @@ echo "  ✅ prd namespace ready"
 kubectl apply -f "$DIR/logging/"
 echo "  ⏳ 等待日志收集 Pod 就绪 (prd)..."
 kubectl wait --for=condition=ready pod -n prd --all --timeout=180s
-echo "  ✅ Elasticsearch + Fluentd + Kibana 就绪 (prd)"
+echo "  ✅ Elasticsearch + Kafka + Fluentd + Kibana 就绪 (prd)"
 echo "  🌐 Kibana: http://kibana.logging.local ()"
 
 # ── Step 6/8: 部署监控 (Prometheus + Grafana)

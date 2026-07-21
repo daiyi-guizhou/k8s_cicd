@@ -27,6 +27,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "k8s_console.middleware.RequestIDMiddleware",
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "k8s_console.middleware.ApiLoggingMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -104,73 +105,59 @@ AUDIT_EXCLUDE_PATHS = ["/api/auth/login", "/api/auth/logout"]
 BUILDER_SERVICE_URL = os.environ.get("BUILDER_SERVICE_URL", "http://192.168.1.24:9008")
 
 # ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+# Log path: shared volume between app container and filebeat sidecar
+LOG_DIR = Path(os.environ.get("LOG_DIR", "/shared/logs"))
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "request_id": {
+            "()": "k8s_console.logging_filters.RequestIDFilter",
+            "service_name": os.environ.get('SERVICE_NAME', 'k8s-console-backend'),
+        },
+    },
     "formatters": {
         "json": {
-            "format": "{\\\"time\\\": \\\"%(asctime)s\\\", \\\"level\\\": \\\"%(levelname)s\\\", \\\"logger\\\": \\\"%(name)s\\\", \\\"message\\\": \\\"%(message)s\\\", \\\"path\\\": \\\"%(pathname)s\\\", \\\"lineno\\\": %(lineno)d, \\\"error_count\\\": 1}",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
-        },
-        "api": {
-            "format": "[%(asctime)s] %(levelname)s %(name)s %(message)s",
+            "format": (
+                '{"time":"%(asctime)s","level":"%(levelname)s",'
+                '"service":"%(service)s","request_id":"%(request_id)s",'
+                '"pod":"%(pod)s","logger":"%(name)s","message":"%(message)s",'
+                '"path":"%(pathname)s","lineno":%(lineno)d}'
+            ),
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },
     "handlers": {
-        "json_console": {
-            "class": "logging.StreamHandler",
-            "formatter": "json",
-        },
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "api",
-        },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": str(LOG_DIR / "api.log"),
-            "maxBytes": 10 * 1024 * 1024,  # 10 MB
-            "backupCount": 5,
-            "formatter": "api",
-        },
-
-        "json_file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": str(LOG_DIR / "api.json.log"),
-            "maxBytes": 50 * 1024 * 1024,  # 50 MB
+            "filename": str(LOG_DIR / f"{os.environ.get('SERVICE_NAME', 'k8s-console-backend')}.json.log"),
+            "maxBytes": 50 * 1024 * 1024,
             "backupCount": 3,
             "formatter": "json",
+            "filters": ["request_id"],
         },
     },
     "loggers": {
         "api": {
-            "handlers": ["console", "file", "json_console"],
+            "handlers": ["file"],
             "level": "INFO",
             "propagate": False,
         },
         "django.request": {
-        "handlers": ["json_console", "json_file"],
-        "level": "WARNING",
-        "propagate": False,
-    },
-    "django.db.backends": {
-        "handlers": ["console"],
-        "level": "WARNING",
-        "propagate": False,
-    },
-    "django": {
-            "handlers": ["json_console"],
+            "handlers": ["file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.db.backends": {
+            "handlers": ["file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django": {
+            "handlers": ["file"],
             "level": "WARNING",
             "propagate": False,
         },
     },
 }
-
-
-# Slow API request logging threshold (seconds)
-SLOW_REQUEST_THRESHOLD = 1.0

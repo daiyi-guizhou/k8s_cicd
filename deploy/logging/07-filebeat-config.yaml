@@ -1,0 +1,51 @@
+# filebeat ConfigMap — sidecar template for any Django service
+#
+# Template variables:
+#   {SERVICE_NAME}  e.g. k8s-console-backend
+#   {KAFKA_TOPIC}   e.g. logs.k8s-console-backend
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-config
+  namespace: prd
+  labels:
+    app: filebeat
+    component: logging
+data:
+  filebeat.yml: |
+    filebeat.inputs:
+      - type: log
+        enabled: true
+        paths:
+          - /shared/logs/*.json.log
+        # Each line in the JSON log file is a complete JSON document
+        json.keys_under_root: true
+        json.add_error_key: true
+        json.overwrite_keys: true
+        # Add per-app metadata from the log record itself
+        # "service" field is already in the JSON from Django's formatter
+
+    # Optional: enrich with pod metadata via downward API env vars
+    processors:
+      - add_host_metadata:
+          when.not.contains.tags: forwarded
+      - add_fields:
+          target: kubernetes
+          fields:
+            pod_name: ${POD_NAME}
+            namespace: ${POD_NAMESPACE}
+
+    output.kafka:
+      hosts: ["kafka-0.kafka.prd.svc:9092"]
+      topic: "logs.%{[service]}"
+      key: "%{[service]}"
+      partition.round_robin:
+        reachable_only: true
+      required_acks: 1
+      compression: gzip
+      max_message_bytes: 1048576
+
+    logging.level: info
+    logging.to_files: false
+    logging.json: false

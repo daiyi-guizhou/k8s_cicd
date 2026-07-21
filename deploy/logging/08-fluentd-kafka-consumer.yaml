@@ -1,0 +1,106 @@
+﻿# Fluentd Deployment — consumes JSON logs from Kafka, writes to Elasticsearch
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd
+  namespace: prd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-kafka-config
+  namespace: prd
+  labels:
+    app: fluentd
+    component: logging
+data:
+  fluent.conf: |
+    <source>
+      @type rdkafka2
+      @id in_kafka_logs
+      brokers kafka-0.kafka.prd.svc:9092
+      topics logs.k8s-console-backend
+      format json
+      @label @INGEST
+    </source>
+    <label @INGEST>
+      <filter **>
+        @type parser
+        key_name time
+        reserve_data true
+        <parse>
+          @type time
+          format %Y-%m-%d %H:%M:%S
+        </parse>
+      </filter>
+      <match **>
+        @type elasticsearch
+        @id out_es
+        host elasticsearch.prd.svc
+        port 9200
+        scheme http
+        logstash_format true
+        logstash_prefix k8s
+        include_tag_key true
+        type_name _doc
+        flush_interval 5s
+        <buffer tag>
+          @type file
+          path /var/log/fluentd-buffers/kubernetes.buffer
+          flush_thread_count 2
+          flush_interval 5s
+          chunk_limit_size 32M
+          queue_limit_length 32
+          retry_max_interval 30
+          retry_forever true
+        </buffer>
+      </match>
+    </label>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluentd
+  namespace: prd
+  labels:
+    app: fluentd
+    component: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fluentd
+  template:
+    metadata:
+      labels:
+        app: fluentd
+        component: logging
+    spec:
+      serviceAccountName: fluentd
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: fluentd
+          image: fluent/fluentd-kubernetes-daemonset:v1-debian-elasticsearch
+          env:
+            - name: FLUENT_ELASTICSEARCH_HOST
+              value: "elasticsearch.prd.svc"
+            - name: FLUENT_ELASTICSEARCH_PORT
+              value: "9200"
+            - name: FLUENT_ELASTICSEARCH_SCHEME
+              value: "http"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: fluentd-kafka-config
+              mountPath: /fluentd/etc/fluent.conf
+              subPath: fluent.conf
+      volumes:
+        - name: fluentd-kafka-config
+          configMap:
+            name: fluentd-kafka-config

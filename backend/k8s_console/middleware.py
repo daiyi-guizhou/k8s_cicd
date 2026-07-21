@@ -1,13 +1,35 @@
-"""Middleware: ApiLogging, AuditLogger, TokenBlacklist, VersionCheck, TokenRefresh."""
+﻿"""Middleware: ApiLogging, AuditLogger, TokenBlacklist, VersionCheck, TokenRefresh, RequestID."""
 import json
 import logging
 import time
+import uuid
 from datetime import datetime
 from django.conf import settings
 from django.http import JsonResponse, RawPostDataException
 from apps.auth_app.authentication import get_user_from_token
 import redis as _redis
 from django.conf import settings as _settings
+from k8s_console.logging_filters import set_request_id
+
+logger = logging.getLogger(__name__)
+api_logger = logging.getLogger("api")
+
+
+class RequestIDMiddleware:
+    """Generate or read X-Request-ID header, store in thread-local for logging.
+
+    Must be the **first** middleware so request_id is available to all later handlers.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        request.request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        set_request_id(request.request_id)
+        response = self.get_response(request)
+        response["X-Request-ID"] = request.request_id
+        return response
 
 logger = logging.getLogger(__name__)
 api_logger = logging.getLogger("api")

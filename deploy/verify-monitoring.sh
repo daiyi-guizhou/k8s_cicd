@@ -1,17 +1,19 @@
-
-#!/bin/bash
+﻿#!/bin/bash
 # ============================================
-#  Verify ELK + Prometheus deployment health
+#  Verify ELK + Kafka + Prometheus deployment health
 #  Usage: bash deploy/verify-monitoring.sh
 # ============================================
 set -e
 
 echo "=========================================="
-echo "  Verifying Logging (ELK Stack)"
+echo "  Verifying Logging (ELK + Kafka Stack)"
 echo "=========================================="
 
 echo "--- Elasticsearch ---"
 kubectl get pods -n prd -l app=elasticsearch 2>/dev/null || echo "  (no pods)"
+
+echo "--- Kafka ---"
+kubectl get pods -n prd -l app=kafka 2>/dev/null || echo "  (no pods)"
 
 echo "--- Fluentd ---"
 kubectl get pods -n prd -l app=fluentd 2>/dev/null || echo "  (no pods)"
@@ -32,6 +34,24 @@ try:
 except:
     print('  (ES not ready or unreachable)')
 " 2>/dev/null || echo "  (ES not ready yet)"
+
+echo ""
+echo "--- Kafka Topics ---"
+kubectl exec -n prd kafka-0 -- kafka-topics.sh --list --bootstrap-server localhost:9092 2>/dev/null || echo "  (Kafka not ready)"
+
+echo ""
+echo "--- Filebeat sidecars (Backend pods) ---"
+kubectl get pods -n prd -l app=k8s-console-backend -o json 2>/dev/null | python3 -c "
+import sys,json
+try:
+    pods=json.load(sys.stdin).get('items',[])
+    for p in pods:
+        containers=[c['name'] for c in p['spec']['containers']]
+        has_fb='filebeat' in containers
+        print(f'  {p[\"metadata\"][\"name\"]}: filebeat={\"YES\" if has_fb else \"NO\"}')
+except:
+    print('  (cannot inspect backend pods)')
+" 2>/dev/null || echo "  (no backend pods)"
 
 echo ""
 echo "=========================================="
