@@ -1,0 +1,88 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-prov
+  namespace: prd
+  labels:
+    app: grafana
+data:
+  default.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /etc/grafana/provisioning/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: prd
+  labels:
+    grafana_dashboard: "1"
+data:
+  k8s-cluster.json: |
+    {
+      "title": "K8s Cluster Overview",
+      "uid": "k8s-cluster-overview",
+      "timezone": "browser",
+      "editable": true,
+      "panels": [
+        {
+          "title": "Node CPU Usage",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "percent" }
+          }
+        },
+        {
+          "title": "Node Memory Usage",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "percent" }
+          }
+        },
+        {
+          "title": "Pod Count by Namespace",
+          "type": "bargauge",
+          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "count by (namespace) (kube_pod_info)",
+              "legendFormat": "{{namespace}}"
+            }
+          ]
+        },
+        {
+          "title": "Deployment Replicas",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "kube_deployment_status_replicas_available",
+              "legendFormat": "{{namespace}}/{{deployment}}"
+            }
+          ]
+        }
+      ]
+    }

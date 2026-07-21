@@ -40,6 +40,16 @@
 
     <div class="sidebar-divider"></div>
 
+        <router-link to="/logs" class="sidebar-item" active-class="active">
+      📜 日志浏览
+    </router-link>
+
+    <router-link to="/metrics" class="sidebar-item" active-class="active">
+      📈 集群指标
+    </router-link>
+
+    <div class="sidebar-divider"></div>
+
     <router-link to="/deploy" class="sidebar-item" active-class="active">
       🚀 CI/CD 部署
     </router-link>

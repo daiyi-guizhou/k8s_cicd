@@ -17,6 +17,10 @@ spec:
       labels:
         app: k8s-console-backend
         component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: k8s-console
       containers:
@@ -56,6 +60,10 @@ metadata:
   namespace: prd
   labels:
     app: k8s-console-backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
 spec:
   type: ClusterIP
   selector:

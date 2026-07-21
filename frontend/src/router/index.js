@@ -50,6 +50,18 @@ const routes = [
     component: () => import("../views/DeployManagementPage.vue"),
     meta: { requiresAuth: true },
   },
+  {
+    path: "/logs",
+    name: "LogExplorer",
+    component: () => import("../views/LogExplorerPage.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/metrics",
+    name: "MetricsDashboard",
+    component: () => import("../views/MetricsDashboardPage.vue"),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({

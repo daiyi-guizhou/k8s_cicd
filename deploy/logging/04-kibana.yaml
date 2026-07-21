@@ -1,0 +1,71 @@
+# Kibana 7.17 Deployment + Service
+# Web UI for searching and visualizing Elasticsearch logs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: prd
+  labels:
+    app: kibana
+    component: logging
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5601
+      targetPort: 5601
+      name: http
+  selector:
+    app: kibana
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: prd
+  labels:
+    app: kibana
+    component: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+        component: logging
+    spec:
+      containers:
+        - name: kibana
+          image: docker.elastic.co/kibana/kibana:7.17.27
+          ports:
+            - containerPort: 5601
+              name: http
+          env:
+            - name: ELASTICSEARCH_HOSTS
+              value: "http://elasticsearch.prd.svc:9200"
+            - name: SERVER_HOST
+              value: "0.0.0.0"
+            - name: SERVER_PUBLICBASEURL
+              value: "http://kibana.logging.local"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: 5601
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: 5601
+            initialDelaySeconds: 60
+            periodSeconds: 20

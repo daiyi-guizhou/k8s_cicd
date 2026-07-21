@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================
 #  K8s Console — 一键部署全部
-#  流程: 构建镜像 → 数据库 → Ingress → Console → 注册集群 → 启动网关
+#  流程: 构建镜像 → 数据库 → Ingress → 日志收集 → 监控 → Console → 注册集群 → 启动网关
 #
 #  ⚠️  执行环境: Git Bash (MINGW64)，不要在 WSL 中执行！
 #     原因: node_modules 为 Windows 平台原生模块，
@@ -36,12 +36,14 @@ K8s Console 一键部署脚本
   --help        显示此帮助
 
 流程:
-  Step 1/6: 构建后端镜像 (Django)
-  Step 2/6: 构建前端镜像 (Vue + Nginx)
-  Step 3/6: 部署数据库 (MySQL + Redis)
-  Step 4/6: 部署 Ingress-NGINX
-  Step 5/6: 部署 K8s Console (Backend + Frontend + Ingress)
-  Step 6/6: 注册集群 + 启动本地网关
+  Step 1/8: 构建后端镜像 (Django)
+  Step 2/8: 构建前端镜像 (Vue + Nginx)
+  Step 3/8: 部署数据库 (MySQL + Redis)
+  Step 4/8: 部署 Ingress-NGINX
+  Step 5/8: 部署日志收集 (ELK - Elasticsearch + Fluentd + Kibana)
+  Step 6/8: 部署监控 (Prometheus + Node Exporter + Grafana)
+  Step 7/8: 部署 K8s Console (Backend + Frontend + Ingress)
+  Step 8/8: 注册集群 + 启动本地网关
 
 部署后访问: http://k8s-cicd.daiyi.local.com:9001
 HELP
@@ -58,14 +60,14 @@ echo "=========================================="
 if $DO_CLEAN; then
   echo ""
   echo "🧹 --clean: 先清理已有资源..."
-  bash "$DIR/clean-all.sh"
+  "$BASH" "$DIR/clean-all.sh"
   echo ""
 fi
 
 # ── Step 1: 构建后端镜像 ──
 echo ""
 echo "=========================================="
-echo "  Step 1/6: 构建后端镜像"
+echo "  Step 1/8: 构建后端镜像"
 echo "=========================================="
 
 if $SKIP_BUILD; then
@@ -81,7 +83,7 @@ fi
 # ── Step 2: 构建前端镜像 ──
 echo ""
 echo "=========================================="
-echo "  Step 2/6: 构建前端镜像"
+echo "  Step 2/8: 构建前端镜像"
 echo "=========================================="
 
 if $SKIP_BUILD; then
@@ -99,7 +101,7 @@ fi
 # ── Step 3: 部署数据库 ──
 echo ""
 echo "=========================================="
-echo "  Step 3/6: 部署数据库 (MySQL + Redis)"
+echo "  Step 3/8: 部署数据库 (MySQL + Redis)"
 echo "=========================================="
 
 kubectl apply -f "$DIR/database/"
@@ -110,7 +112,7 @@ echo "  ✅ MySQL + Redis 就绪"
 # ── Step 4: 部署 Ingress-NGINX ──
 echo ""
 echo "=========================================="
-echo "  Step 4/6: 部署 Ingress-NGINX"
+echo "  Step 4/8: 部署 Ingress-NGINX"
 echo "=========================================="
 
 kubectl apply -f "$DIR/ingress-nginx/"
@@ -121,10 +123,38 @@ kubectl wait --for=condition=ready pod \
   --timeout=120s
 echo "  ✅ ingress-nginx 就绪"
 
-# ── Step 5: 部署 K8s Console ──
+# ── Step 5/8: 部署日志收集 (ELK)
 echo ""
 echo "=========================================="
-echo "  Step 5/6: 部署 K8s Console (Backend + Frontend)"
+echo "  Step 5/8: 部署日志收集 (ELK — Elasticsearch + Fluentd + Kibana)"
+echo "=========================================="
+
+# Ensure prd namespace exists (ELK + Monitoring + Console share it)
+kubectl create namespace prd --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null || true
+echo "  ✅ prd namespace ready"
+kubectl apply -f "$DIR/logging/"
+echo "  ⏳ 等待日志收集 Pod 就绪 (prd)..."
+kubectl wait --for=condition=ready pod -n prd --all --timeout=180s
+echo "  ✅ Elasticsearch + Fluentd + Kibana 就绪 (prd)"
+echo "  🌐 Kibana: http://kibana.logging.local ()"
+
+# ── Step 6/8: 部署监控 (Prometheus + Grafana)
+echo ""
+echo "=========================================="
+echo "  Step 6/8: 部署监控 (Prometheus + Node Exporter + Grafana)"
+echo "=========================================="
+
+kubectl apply -f "$DIR/monitoring/"
+echo "  ⏳ 等待监控 Pod 就绪 (prd)..."
+kubectl wait --for=condition=ready pod -n prd --all --timeout=180s
+echo "  ✅ Prometheus + Node Exporter + Grafana 就绪 (prd)"
+echo "  📊 Grafana:  http://grafana.monitoring.local (账号 admin/admin)"
+echo "  📈 Prometheus: kubectl port-forward -n prd svc/prometheus 9090:9090"
+
+# ── Step 7: 部署 K8s Console ──
+echo ""
+echo "=========================================="
+echo "  Step 7/8: 部署 K8s Console (Backend + Frontend)"
 echo "=========================================="
 
 kubectl apply -f "$DIR/console/"
@@ -146,7 +176,7 @@ echo "  ────────────────────────
 # ── Step 6: 注册集群 + 启动网关 ──
 echo ""
 echo "=========================================="
-echo "  Step 6/6: 注册集群 + 启动本地网关"
+echo "  Step 8/8: 注册集群 + 启动本地网关"
 echo "=========================================="
 
 # 6a. 启动 port-forward 兜底（确保 NodePort 可用）
@@ -246,7 +276,7 @@ fi
 # 6c. 启动本地网关
 echo ""
 echo "  [6c] 启动本地网关..."
-bash "$DIR/gateway/start.sh"
+"$BASH" "$DIR/gateway/start.sh"
 
 echo ""
 echo "=========================================="
@@ -254,6 +284,9 @@ echo "  🎉 部署完成！"
 echo "=========================================="
 echo ""
 echo "  访问地址: http://k8s-cicd.daiyi.local.com:9001"
+echo "  Kibana:  http://kibana.logging.local (hosts: 127.0.0.1 kibana.logging.local)"
+echo "  Grafana: http://grafana.monitoring.local (hosts: 127.0.0.1 grafana.monitoring.local, 账号 admin/admin)"
+echo "  Prometheus: kubectl port-forward -n prd svc/prometheus 9090:9090"
 echo "  API 健康: curl http://k8s-cicd.daiyi.local.com:9001/api/health"
 echo ""
 echo "  账号信息:"

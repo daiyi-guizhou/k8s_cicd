@@ -1,0 +1,432 @@
+# Prometheus — metrics collection, storage, and alerting
+# RBAC: ServiceAccount + ClusterRole + ClusterRoleBinding
+# ConfigMap: scrape configs for Kubernetes components and node-exporter
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: prd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/metrics
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - configmaps
+    verbs: ["get"]
+  - nonResourceURLs:
+      - "/metrics"
+      - "/metrics/cadvisor"
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: prd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: prd
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: docker-desktop
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - "alertmanager.prd.svc:9093"
+
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+
+    scrape_configs:
+      - job_name: "prometheus"
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      - job_name: "kubernetes-apiservers"
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      - job_name: "kubernetes-nodes"
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      - job_name: "kubernetes-cadvisor"
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - target_label: __metrics_path__
+            replacement: /metrics/cadvisor
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      - job_name: "kubernetes-service-endpoints"
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+            action: replace
+            target_label: __scheme__
+            regex: (https?)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: "$1:$2"
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            action: replace
+            target_label: kubernetes_service_name
+
+      - job_name: "kubernetes-pods"
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+            action: replace
+            target_label: __scheme__
+            regex: (https?)
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: "$1:$2"
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+      - job_name: "node-exporter"
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - monitoring
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: node-exporter
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
+
+      # Django console backend metrics (auto-discovered via pod annotations)
+      - job_name: "console-backend"
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - prd
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: k8s-console-backend
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: "$1:$2"
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: prd
+  labels:
+    app: prometheus
+data:
+  alerts.yml: |
+    groups:
+      - name: kubernetes-apps
+        rules:
+          - alert: HighPodCPU
+            expr: sum(rate(container_cpu_usage_seconds_total{container!="",pod!=""}[5m])) by (pod, namespace) > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ .namespace }}/{{ .pod }} CPU usage above 80%"
+              description: "Pod CPU usage is {{ $value | humanizePercentage }} for 5 minutes."
+
+          - alert: HighPodMemory
+            expr: sum(container_memory_working_set_bytes{container!="",pod!=""}) by (pod, namespace) / sum(kube_pod_container_resource_limits{resource="memory"}) by (pod, namespace) > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ .namespace }}/{{ .pod }} memory usage above 80%"
+              description: "Pod memory usage is {{ $value | humanizePercentage }} for 5 minutes."
+
+          - alert: PodCrashLooping
+            expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ .namespace }}/{{ .pod }} is crash-looping"
+              description: "Container {{ $labels.container }} has restarted {{ $value }} times in the last 15 minutes."
+
+          - alert: PodNotReady
+            expr: sum(kube_pod_status_ready{condition="true"}) by (pod, namespace) == 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ .namespace }}/{{ .pod }} is not ready"
+              description: "Pod has been in NotReady state for 5 minutes."
+
+      - name: kubernetes-nodes
+        rules:
+          - alert: HighNodeCPU
+            expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Node {{ .instance }} CPU usage above 90%"
+              description: "Node CPU usage is {{ $value }}% for 5 minutes."
+
+          - alert: HighNodeMemory
+            expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Node {{ .instance }} memory usage above 90%"
+              description: "Node memory usage is {{ $value }}% for 5 minutes."
+
+      - name: console-app
+        rules:
+          - alert: ConsoleBackendDown
+            expr: up{job="console-backend"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Console backend pod is down"
+              description: "The k8s-console-backend health check is failing."
+
+          - alert: HighErrorRate
+            expr: rate(django_http_responses_total_by_status_total{status=~"5.."}[5m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High 5xx error rate on console backend"
+              description: "5xx error rate is {{ $value }} errors/sec."
+
+          - alert: DatabaseConnectionHigh
+            expr: django_db_connections_total > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Database connections above 80"
+              description: "Current DB connections: {{ $value }}."
+
+          - alert: HighLogErrorRate
+            expr: rate(django_log_errors_total[5m]) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Log ERROR rate above 2/sec"
+              description: "ERROR log rate is {{ $value }} errors/sec in the last 5 minutes."
+
+          - alert: SlowAPIResponses
+            expr: histogram_quantile(0.95, rate(api_request_latency_seconds_bucket[5m])) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "API P95 latency above 2 seconds"
+              description: "P95 latency is {{ $value }}s."
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: prd
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: http
+  selector:
+    app: prometheus
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: prd
+  labels:
+    app: prometheus
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: prd
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        component: monitoring
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.53.3
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=15d"
+            - "--web.enable-lifecycle"
+          ports:
+            - containerPort: 9090
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: prometheus-rules
+              mountPath: /etc/prometheus/rules
+            - name: prometheus-data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 20
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
+        - name: prometheus-rules
+          configMap:
+            name: prometheus-rules
+        - name: prometheus-data
+          persistentVolumeClaim:
+            claimName: prometheus-data

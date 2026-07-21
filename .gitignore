@@ -12,3 +12,4 @@ dist/
 # 敏感文件 — 本机 kubeconfig，绝对不能提交
 deploy/kubeconfigs/*.yaml
 deploy/kubeconfigs/*.yml
+.codex/

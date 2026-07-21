@@ -11,7 +11,7 @@
 set -e
 
 echo "=========================================="
-echo "  K8s Console — 一键清理"
+echo "  K8s Console — 一键清理 (含日志/监控)"
 echo "=========================================="
 
 # 1. 删除 namespace（含所有内部资源 + PVC）
@@ -33,8 +33,8 @@ done
 # 2. 删除 cluster 级别资源
 echo "[2/4] 删除 cluster 级别资源..."
 kubectl delete ingressclass nginx --ignore-not-found 2>/dev/null || true
-kubectl delete clusterrolebinding ingress-nginx ingress-nginx-leader k8s-console --ignore-not-found 2>/dev/null || true
-kubectl delete clusterrole ingress-nginx ingress-nginx-leader k8s-console --ignore-not-found 2>/dev/null || true
+kubectl delete clusterrolebinding ingress-nginx ingress-nginx-leader k8s-console fluentd prometheus --ignore-not-found 2>/dev/null || true
+kubectl delete clusterrole ingress-nginx ingress-nginx-leader k8s-console fluentd prometheus --ignore-not-found 2>/dev/null || true
 
 # 3. 停止本地网关容器
 echo "[3/4] 停止本地网关容器..."

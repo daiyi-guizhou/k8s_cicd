@@ -1,4 +1,4 @@
-# ☸️ K8s Management Console — K8s 管理控制台
+﻿# ☸️ K8s Management Console — K8s 管理控制台
 
 基于 Django REST Framework + Vue 3 的 Kubernetes 集群管理 Web 控制台，支持多集群管理、资源 CRUD、YAML Apply、用户管理和审计日志。
 
@@ -176,8 +176,10 @@ bash deploy/deploy-all.sh --clean
 2. 构建前端镜像（Vue SPA + Nginx）
 3. 部署 MySQL + Redis（database namespace）
 4. 部署 Ingress-NGINX + NodePort（ingress-nginx namespace）
-5. 部署 K8s Console Backend + Frontend + Ingress（prd namespace）
-6. 从 `deploy/kubeconfigs/` 自动注册集群 + 启动本地网关
+5. 部署 ELK 日志收集（prd namespace）
+6. 部署 Prometheus 监控（prd namespace）
+7. 部署 K8s Console Backend + Frontend + Ingress（prd namespace）
+8. 从 `deploy/kubeconfigs/` 自动注册集群 + 启动本地网关
 
 ### 一键部署应用（CI/CD）
 
@@ -292,6 +294,36 @@ bash deploy/gateway/start.sh
 
 ---
 
+## 日志与监控
+
+## 日志与监控
+
+部署脚本会自动部署 ELK 日志栈和 Prometheus 监控栈。
+
+### ELK 日志收集 (prd namespace)
+
+| 组件 | 说明 | 访问 |
+|------|------|------|
+| Elasticsearch | 日志存储与搜索引擎 | 内部: elasticsearch.prd.svc:9200 |
+| Fluentd | 容器日志采集 DaemonSet | 自动采集所有 Pod 日志 |
+| Kibana | 日志可视化 Web UI | http://kibana.logging.local (需配置 hosts) |
+
+> 浏览器访问 Kibana 前，需在 Windows hosts 中添加: 127.0.0.1 kibana.logging.local
+
+### Prometheus 监控 (prd namespace)
+
+| 组件 | 说明 | 访问 |
+|------|------|------|
+| Prometheus | 指标采集与存储 | 内部: prometheus.prd.svc:9090 |
+| Node Exporter | 节点级 CPU/内存/磁盘指标 | DaemonSet 自动采集 |
+| Grafana | 仪表盘可视化 | http://grafana.monitoring.local (需配置 hosts) |
+
+> Grafana 默认账号: admin / admin  
+> 浏览器访问 Grafana 前，需在 Windows hosts 中添加: 127.0.0.1 grafana.monitoring.local  
+> Prometheus 本地访问: kubectl port-forward -n prd svc/prometheus 9090:9090
+
+---
+
 ## 文档索引
 
 | 文档 | 说明 |
@@ -302,6 +334,8 @@ bash deploy/gateway/start.sh
 | [docs/cicd-deploy.md](docs/cicd-deploy.md) | CI/CD 自动化部署 — Django/Vue 项目一键构建部署回滚 |
 | [docs/多集群添加教程.md](docs/多集群添加教程.md) | 添加和管理多个 K8s 集群的教程 |
 | [docs/e2e-test-conditions.md](docs/e2e-test-conditions.md) | E2E 测试用例和验收条件（F1-F15） |
+| [deploy/logging/](deploy/logging/) | ELK 日志栈部署清单 (部署到 prd namespace) |
+| [deploy/monitoring/](deploy/monitoring/) | Prometheus 监控栈部署清单 (部署到 prd namespace) |
 | [backend/README.md](backend/README.md) | 后端开发指南（conda 环境、API 概览、数据库表结构） |
 | [frontend/README.md](frontend/README.md) | 前端开发指南（页面结构、本地开发、组件树） |
 
@@ -356,7 +390,7 @@ k8s_cicd/
 │       ├── django/Dockerfile
 │       └── vue/Dockerfile
 ├── deploy/                              # K8s 部署清单
-│   ├── deploy-all.sh                    # ingress-nginx + 演示应用一键部署
+│   ├── deploy-all.sh                    # 一键部署（含 ELK + Prometheus）
 │   ├── ingress-nginx/                   # Ingress-NGINX 网关基础设施
 │   │   ├── 01-namespace.yaml            # ingress-nginx Namespace
 │   │   ├── 02-rbac.yaml                 # RBAC (SA + Role + ClusterRole)
@@ -380,6 +414,17 @@ k8s_cicd/
 │   │   └── 07-ingress.yaml              # Ingress 路由
 │   ├── demo/                            # 演示应用（验证 ingress-nginx）
 │   │   └── 01-prd-app.yaml              # nginx demo (host: myapp.local)
+│   ├── logging/                         # ELK 日志收集部署 (部署到 prd)
+│   │   ├── 02-elasticsearch.yaml        # Elasticsearch 7.17 StatefulSet
+│   │   ├── 03-fluentd.yaml              # Fluentd DaemonSet + RBAC
+│   │   ├── 04-kibana.yaml               # Kibana 7.17 Deployment
+│   │   └── 05-kibana-ingress.yaml       # Kibana Ingress 路由
+│   ├── monitoring/                       # Prometheus 监控部署 (部署到 prd)
+│   │   ├── 02-prometheus.yaml           # Prometheus Deployment + ConfigMap
+│   │   ├── 03-node-exporter.yaml        # Node Exporter DaemonSet
+│   │   ├── 04-grafana.yaml              # Grafana Deployment + Datasource
+│   │   ├── 05-grafana-ingress.yaml      # Grafana Ingress 路由
+│   │   └── 05-grafana-dashboards.yaml   # Grafana Dashboard ConfigMaps
 │   └── gateway/                         # 本地 NGINX 网关
 │       ├── nginx.conf                   # 网关 NGINX 配置
 │       ├── start.sh                     # 一键启动脚本
@@ -461,3 +506,36 @@ npm run dev
 | `host.docker.internal` 解析宿主机 | Docker Desktop 内置，无需 `--add-host` |
 | `deploy/gateway/`（原 `deploy/openresty/`） | 已重命名为 gateway/，反映实际使用的 nginx:latest |
 | `deploy/deploy-all.sh` 部署的是演示应用 | 和 k8s-console 控制台应用是两套独立部署；Console 部署见 `deploy/console/` |
+
+## 日志收集 (ELK)
+
+| 索引 | 用途 |
+|------|------|
+| `k8s-*` | 全量 K8s 容器日志 |
+| `k8s-backend-*` | Django Backend 结构化日志 |
+| `k8s-backend-error-*` | Backend ERROR/CRITICAL/Exception 日志 |
+| `k8s-mysql-*` | MySQL 慢查询和错误日志 |
+| `k8s-redis-*` | Redis 运行日志 |
+| `k8s-nginx-*` | Nginx/Frontend access 和 error 日志 |
+
+**访问**: http://kibana.logging.local (需 hosts: `127.0.0.1 kibana.logging.local`)
+
+## 监控 (Prometheus + Grafana)
+
+**Scrape Targets**:
+- `console-backend` — Django 应用 `/api/observability/metrics/export` (log_errors, api_latency)
+- `kubernetes-service-endpoints` / `kubernetes-pods` — 自动发现带 `prometheus.io/scrape` 注解的服务
+- `node-exporter` — 节点 CPU/Memory/Disk
+- `kubernetes-cadvisor` — 容器资源指标
+
+**告警规则**:
+- `ConsoleBackendDown` — Backend 健康检查失败 (2m)
+- `HighErrorRate` — 5xx 错误率 > 0.1/s
+- `HighLogErrorRate` — Django ERROR 日志速率 > 2/s
+- `DatabaseConnectionHigh` — DB 连接数 > 80
+- `SlowAPIResponses` — API P95 延迟 > 2s
+- `HighPodCPU` / `HighPodMemory` — Pod 资源 > 80%
+- `PodCrashLooping` / `PodNotReady`
+- `HighNodeCPU` / `HighNodeMemory` — 节点资源 > 90%
+
+**访问**: http://grafana.monitoring.local (admin/admin, 需 hosts: `127.0.0.1 grafana.monitoring.local`)

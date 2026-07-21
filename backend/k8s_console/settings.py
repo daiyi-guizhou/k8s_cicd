@@ -14,14 +14,20 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.staticfiles",
     "rest_framework",
+    "django_prometheus",
     "apps.auth_app",
     "apps.resources",
     "apps.audit",
     "apps.clusters",
     "apps.deploy",
+    "apps.monitoring",
+    "apps.logging_api",
+    "apps.observability",
+    
 ]
 
 MIDDLEWARE = [
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "k8s_console.middleware.ApiLoggingMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -29,6 +35,7 @@ MIDDLEWARE = [
     "k8s_console.middleware.TokenBlacklistMiddleware",
     "k8s_console.middleware.TokenRefreshMiddleware",
     "k8s_console.middleware.AuditLoggerMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "k8s_console.urls"
@@ -39,7 +46,7 @@ STATIC_URL = "static/"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
+        "ENGINE": "django_prometheus.db.backends.mysql",
         "NAME": os.environ.get("MYSQL_DATABASE", "appdb"),
         "USER": os.environ.get("MYSQL_USER", "appuser"),
         "PASSWORD": os.environ.get("MYSQL_PASSWORD", "UserPass2024!"),
@@ -51,7 +58,7 @@ DATABASES = {
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "BACKEND": "django_prometheus.cache.backends.redis.RedisCache",
         "LOCATION": f"redis://:{os.environ.get('REDIS_PASSWORD', 'RedisPass2024!')}"
                     f"@{os.environ.get('REDIS_HOST', 'redis.database.svc')}"
                     f":{os.environ.get('REDIS_PORT', '6379')}/1",
@@ -106,12 +113,20 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
+        "json": {
+            "format": "{\\\"time\\\": \\\"%(asctime)s\\\", \\\"level\\\": \\\"%(levelname)s\\\", \\\"logger\\\": \\\"%(name)s\\\", \\\"message\\\": \\\"%(message)s\\\", \\\"path\\\": \\\"%(pathname)s\\\", \\\"lineno\\\": %(lineno)d, \\\"error_count\\\": 1}",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
         "api": {
             "format": "[%(asctime)s] %(levelname)s %(name)s %(message)s",
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },
     "handlers": {
+        "json_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+        },
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "api",
@@ -123,12 +138,39 @@ LOGGING = {
             "backupCount": 5,
             "formatter": "api",
         },
+
+        "json_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "api.json.log"),
+            "maxBytes": 50 * 1024 * 1024,  # 50 MB
+            "backupCount": 3,
+            "formatter": "json",
+        },
     },
     "loggers": {
         "api": {
-            "handlers": ["console", "file"],
+            "handlers": ["console", "file", "json_console"],
             "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+        "handlers": ["json_console", "json_file"],
+        "level": "WARNING",
+        "propagate": False,
+    },
+    "django.db.backends": {
+        "handlers": ["console"],
+        "level": "WARNING",
+        "propagate": False,
+    },
+    "django": {
+            "handlers": ["json_console"],
+            "level": "WARNING",
             "propagate": False,
         },
     },
 }
+
+
+# Slow API request logging threshold (seconds)
+SLOW_REQUEST_THRESHOLD = 1.0

@@ -12,6 +12,27 @@
         <div class="stat-label">{{ stat.label }}</div>
       </div>
     </div>
+    <!-- 外部工具快速跳转 -->
+    <div style="margin-top:28px;">
+      <h3 style="font-size:15px;color:var(--color-text-secondary);margin-bottom:12px;">🔗 外部工具</h3>
+      <div class="dashboard-grid">
+        <a href="http://kibana.logging.local" target="_blank" rel="noopener" class="card tool-card tool-card-es">
+          <div class="tool-icon">🔍</div>
+          <div class="tool-name">Kibana</div>
+          <div class="tool-desc">日志查询与分析</div>
+        </a>
+        <a href="http://grafana.monitoring.local" target="_blank" rel="noopener" class="card tool-card tool-card-grafana">
+          <div class="tool-icon">📊</div>
+          <div class="tool-name">Grafana</div>
+          <div class="tool-desc">指标仪表盘</div>
+        </a>
+        <a href="http://prometheus.monitoring.local" target="_blank" rel="noopener" class="card tool-card tool-card-prom">
+          <div class="tool-icon">🔥</div>
+          <div class="tool-name">Prometheus</div>
+          <div class="tool-desc">时序数据库与告警</div>
+        </a>
+      </div>
+    </div>
     <div v-if="error" class="card" style="margin-top:16px;color:#dc2626;">{{ error }}</div>
   </div>
 </template>
@@ -74,4 +95,19 @@ onMounted(async () => {
   color: var(--color-text-secondary);
   margin-top: 4px;
 }
+
+.tool-card {
+  text-align: center;
+  padding: 20px 16px;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+}
+.tool-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+.tool-card-es:hover { border-left-color: #07C; }
+.tool-card-grafana:hover { border-left-color: #F46800; }
+.tool-card-prom:hover { border-left-color: #E6522C; }
+.tool-icon { font-size: 28px; margin-bottom: 6px; }
+.tool-name { font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
+.tool-desc { font-size: 12px; color: var(--color-text-secondary); margin-top: 4px; }
 </style>

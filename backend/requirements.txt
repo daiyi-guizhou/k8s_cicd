@@ -4,3 +4,6 @@ kubernetes>=34.0,<35.0
 mysqlclient>=2.2,<2.3
 redis>=7.0,<8.0
 gunicorn>=23.0,<24.0
+django-prometheus>=2.3,<2.4
+django-redis>=5.4,<5.5
+requests>=2.31,<2.33
