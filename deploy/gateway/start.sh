@@ -75,6 +75,7 @@ echo "[4/4] Starting NGINX gateway (port ${HOST_PORT} → 30000)..."
 # 解决方案: MSYS_NO_PATHCONV=1 + 源文件用 Windows 路径 (pwd -W 转换)
 WIN_CONF="$(cd "$SCRIPT_DIR" && pwd -W)/nginx.conf"
 MSYS_NO_PATHCONV=1 docker run -d --name "$CONTAINER_NAME" \
+    --add-host=host.docker.internal:host-gateway \
     -p ${HOST_PORT}:80 \
     -v "${WIN_CONF}:/etc/nginx/conf.d/default.conf:ro" \
     "$IMAGE" > /dev/null

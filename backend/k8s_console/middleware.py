@@ -45,6 +45,12 @@ class ApiLoggingMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Skip high-frequency scrape endpoints (e.g. Prometheus /metrics) — their
+        # plaintext exposition body would otherwise be written into the JSON log
+        # file, breaking the downstream filebeat JSON parser and flooding logs.
+        if request.path.rstrip("/").endswith("/metrics"):
+            return self.get_response(request)
+
         start = time.monotonic()
 
         # ---------- request ----------

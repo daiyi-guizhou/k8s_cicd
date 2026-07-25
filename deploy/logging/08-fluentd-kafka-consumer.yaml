@@ -17,7 +17,7 @@ metadata:
 data:
   fluent.conf: |
     <source>
-      @type rdkafka2
+      @type kafka
       @id in_kafka_logs
       brokers kafka-0.kafka.prd.svc:9092
       topics logs.k8s-console-backend
@@ -25,15 +25,6 @@ data:
       @label @INGEST
     </source>
     <label @INGEST>
-      <filter **>
-        @type parser
-        key_name time
-        reserve_data true
-        <parse>
-          @type time
-          format %Y-%m-%d %H:%M:%S
-        </parse>
-      </filter>
       <match **>
         @type elasticsearch
         @id out_es
@@ -47,7 +38,7 @@ data:
         flush_interval 5s
         <buffer tag>
           @type file
-          path /var/log/fluentd-buffers/kubernetes.buffer
+          path /tmp/fluentd-buffers/kubernetes.buffer
           flush_thread_count 2
           flush_interval 5s
           chunk_limit_size 32M
@@ -81,7 +72,8 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: fluentd
-          image: fluent/fluentd-kubernetes-daemonset:v1-debian-elasticsearch
+          image: k8s-console-fluentd:latest
+          imagePullPolicy: IfNotPresent
           env:
             - name: FLUENT_ELASTICSEARCH_HOST
               value: "elasticsearch.prd.svc"

@@ -38,8 +38,12 @@ data:
 
     output.kafka:
       hosts: ["kafka-0.kafka.prd.svc:9092"]
-      topic: "logs.%{[service]}"
-      key: "%{[service]}"
+      # Hard-coded: this ConfigMap is mounted only in the backend pod, so the
+      # topic is fixed. Using a field reference (logs.%{[service]}) caused
+      # "no topic could be selected" whenever a non-JSON line (e.g. the
+      # /metrics exposition text) was tailed and `service` could not be parsed.
+      topic: "logs.k8s-console-backend"
+      key: "k8s-console-backend"
       partition.round_robin:
         reachable_only: true
       required_acks: 1

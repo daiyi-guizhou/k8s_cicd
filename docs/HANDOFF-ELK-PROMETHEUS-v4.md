@@ -153,3 +153,7 @@ Windows hosts:
 - **Kubectl config**: `D:\project\k8s_cicd\k8s_cicd\deploy\kubeconfigs\docker-desktop.yaml`
 - **Namespace**: prd (所有资源统一)
 - **K8s 版本**: v1.34.3 (Docker Desktop)
+
+# k8s log 查看
+进 Kibana → Stack Management → Index Patterns → 新建 k8s-* → Discover 即可按时间、level、service 等字段检索 backend 日志
+

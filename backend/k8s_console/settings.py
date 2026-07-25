@@ -119,12 +119,7 @@ LOGGING = {
     },
     "formatters": {
         "json": {
-            "format": (
-                '{"time":"%(asctime)s","level":"%(levelname)s",'
-                '"service":"%(service)s","request_id":"%(request_id)s",'
-                '"pod":"%(pod)s","logger":"%(name)s","message":"%(message)s",'
-                '"path":"%(pathname)s","lineno":%(lineno)d}'
-            ),
+            "()": "k8s_console.logging_filters.JsonFormatter",
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },
