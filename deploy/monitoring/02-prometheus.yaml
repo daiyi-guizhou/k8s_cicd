@@ -177,7 +177,7 @@ data:
           - role: endpoints
             namespaces:
               names:
-                - monitoring
+                - prd
         relabel_configs:
           - source_labels: [__meta_kubernetes_service_name]
             action: keep
@@ -185,6 +185,12 @@ data:
           - source_labels: [__meta_kubernetes_endpoint_port_name]
             action: keep
             regex: metrics
+
+      # kube-state-metrics: 集群对象状态指标 (kube_pod_info / kube_deployment_* 等)
+      # 修复前缺失，导致 Grafana「Pod 数 / Deployment 副本」面板与多条告警规则无数据
+      - job_name: "kube-state-metrics"
+        static_configs:
+          - targets: ["kube-state-metrics.prd.svc:8080"]
 
       # Django console backend metrics (auto-discovered via pod annotations)
       - job_name: "console-backend"
@@ -372,6 +378,8 @@ metadata:
     component: monitoring
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: prometheus

@@ -63,24 +63,24 @@ data:
           }
         },
         {
-          "title": "Pod Count by Namespace",
+          "title": "Pod 数 by Namespace (cadvisor)",
           "type": "bargauge",
           "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
           "targets": [
             {
-              "expr": "count by (namespace) (kube_pod_info)",
+              "expr": "count by (namespace) (count by (namespace, pod) (container_cpu_usage_seconds_total{container!=\"\", pod!=\"\"}))",
               "legendFormat": "{{namespace}}"
             }
           ]
         },
         {
-          "title": "Deployment Replicas",
+          "title": "Top 内存 Pod (cadvisor)",
           "type": "timeseries",
           "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
           "targets": [
             {
-              "expr": "kube_deployment_status_replicas_available",
-              "legendFormat": "{{namespace}}/{{deployment}}"
+              "expr": "topk(10, sum by (namespace, pod) (container_memory_working_set_bytes{container!=\"\", pod!=\"\"}))",
+              "legendFormat": "{{namespace}}/{{pod}}"
             }
           ]
         }

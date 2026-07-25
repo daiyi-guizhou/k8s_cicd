@@ -445,10 +445,10 @@ F1 → F2 → F3(全部子项) → F4 → F5 → F6 → F7 → F8 → F9 → F10
 
 ## F14. Token 认证 API 测试（curl — 部署后自动验证）
 
-> **执行环境：** 部署完成后（`bash deploy/deploy-all.sh`），在 Git Bash 中通过 curl 直连 NodePort 或 port-forward 执行。以下脚本使用 `kubectl exec` 直接操作 Redis，不依赖外部工具。
+> **执行环境：** 部署完成后（`bash deploy/deploy_one_by_one/deploy-all.sh`），在 Git Bash 中通过 curl 直连 NodePort 或 port-forward 执行。以下脚本使用 `kubectl exec` 直接操作 Redis，不依赖外部工具。
 >
 > **前置条件：**
-> - `deploy-all.sh` 已成功执行，所有 Pod Running
+> - `deploy/deploy_one_by_one/deploy-all.sh` 已成功执行，所有 Pod Running
 > - `kubectl port-forward` 已启动（或 NodePort 30000 可达）
 > - Redis Pod 名可通过 `kubectl get pods -n database -l app=redis -o jsonpath='{.items[0].metadata.name}'` 获取
 

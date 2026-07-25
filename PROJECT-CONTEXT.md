@@ -163,7 +163,7 @@ k8s_cicd/
 - [x] **deploy-*.sh**: deploy-all/clean-all/verify-monitoring 全部同步
 
 ### 待部署验证
-- [ ] `bash deploy/deploy-all.sh --clean` 端到端部署
+- [ ] `bash deploy/deploy_one_by_one/deploy-all.sh --clean` 端到端部署
 - [ ] Kibana 确认 `logs.k8s-console-backend` topic 数据写入 ES
 - [ ] Filebeat sidecar 确认存在 (Backend Pod 应有 2 个容器)
 - [ ] Prometheus targets 全部 UP
@@ -196,13 +196,13 @@ k8s_cicd/
 # ⚠️ Git Bash 中执行
 export KUBECONFIG=deploy/kubeconfigs/docker-desktop.yaml
 
-# 部署
-bash deploy/deploy-all.sh              # 完整部署 8 步
-bash deploy/deploy-all.sh --clean      # 清理后重新部署
-bash deploy/deploy-all.sh --skip-build # 跳过镜像构建
+# 部署（组件化入口：deploy/deploy_one_by_one/）
+bash deploy/deploy_one_by_one/deploy-all.sh              # 完整部署 8 步
+bash deploy/deploy_one_by_one/deploy-all.sh --clean      # 清理后重新部署
+bash deploy/deploy_one_by_one/deploy-all.sh --skip-build # 跳过镜像构建
 
 # 清理
-bash deploy/clean-all.sh
+bash deploy/deploy_one_by_one/clean-all.sh
 
 # 验证
 bash deploy/verify-monitoring.sh       # ES + Kafka + Prometheus 全量检查
@@ -250,7 +250,7 @@ kubectl logs -n prd -l app=k8s-console-backend -c django | grep password
 
 ```bash
 # 1. 端到端部署
-bash deploy/deploy-all.sh --clean
+bash deploy/deploy_one_by_one/deploy-all.sh --clean
 
 # 2. 健康检查
 bash deploy/verify-monitoring.sh

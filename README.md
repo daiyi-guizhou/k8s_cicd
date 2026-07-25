@@ -29,11 +29,11 @@
                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ Layer 1: Docker NGINX 网关容器 (k8s-gateway, nginx:latest)                    │
-│ 端口映射: 宿主 9001 → 容器 :80                                               │
+│ 监听端口: 宿主 9001（--network host，容器 :9001 = 宿主 :9001）              │
 │ 配置: deploy/gateway/nginx.conf                                            │
-│ proxy_pass http://host.docker.internal:30000                                 │
+│ proxy_pass http://127.0.0.1:30000                                            │
 └────────────────────────────┬────────────────────────────────────────────────┘
-                             │ host.docker.internal:30000
+                             │ 127.0.0.1:30000
                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ Layer 2: K8s Ingress Controller (ingress-nginx namespace)                     │
@@ -134,7 +134,7 @@
 |----|------|------|------|
 | ① → ② | **Windows hosts 文件** | `C:\Windows\System32\drivers\etc\hosts` | 将 `*.daiyi.local.com` 解析为 `127.0.0.1`，绕过公网 DNS |
 | ③ | **TCP 连接** | `127.0.0.1:9001` | 连接到 Windows 本机 9001 端口 |
-| ④ | **Docker NGINX 网关** | `k8s-gateway` 容器 | 反向代理到 `host.docker.internal:30000`（Docker Desktop 宿主机地址） |
+| ④ | **Docker NGINX 网关** | `k8s-gateway` 容器 | `--network host` 共享宿主机网络，反向代理到 `127.0.0.1:30000`（直连 Ingress NodePort，无需 `host.docker.internal`） |
 | ⑤ | **K8s NodePort** | `ingress-nginx:30000` | ingress-nginx DaemonSet 的 NodePort Service |
 | ⑥ | **K8s Ingress 规则** | `k8s-console` Ingress | 按 `host + path` 路由到对应的 Service（`/api` → backend:8000，`/` → frontend:80） |
 
@@ -152,7 +152,7 @@
 - Node.js 22+（前端本地开发）
 - Python 3.12+（后端本地开发）
 
-> ⚠️ **脚本执行环境**: `deploy-all.sh` / `clean-all.sh` / `gateway/start.sh` / `gateway/stop.sh` 必须在 **Git Bash (MINGW64)** 中执行，**不能在 WSL (Linux) 中直接执行**。
+> ⚠️ **脚本执行环境**: `deploy/deploy_one_by_one/` 下所有脚本 + `gateway/start.sh` / `gateway/stop.sh` 必须在 **Git Bash (MINGW64)** 中执行，**不能在 WSL (Linux) 中直接执行**。
 >
 > **原因**: `npm install` 在 Windows 下安装的是 `@rollup/rollup-win32-x64-*` 原生模块，WSL 内 rollup 会尝试加载 `@rollup/rollup-linux-x64-gnu`（不存在），导致 `MODULE_NOT_FOUND` 错误。脚本中已内置 `npm install` 会自动检测当前平台，但如果 `node_modules` 已存在则不会触发重装。如需在 WSL 中执行，先 `rm -rf frontend/node_modules && cd frontend && npm install`。
 >
@@ -162,14 +162,22 @@
 
 ```bash
 # 一键部署全部（构建镜像 + 数据库 + Ingress + Console + 注册集群 + 启动网关）
-bash deploy/deploy-all.sh
+bash deploy/deploy_one_by_one/deploy-all.sh
 
 # 如果已构建过镜像，跳过构建步骤
-bash deploy/deploy-all.sh --skip-build
+bash deploy/deploy_one_by_one/deploy-all.sh --skip-build
 
 # 先清理再重新部署
-bash deploy/deploy-all.sh --clean
+bash deploy/deploy_one_by_one/deploy-all.sh --clean
 ```
+
+> 📦 **脚本已组件化**：原 `deploy/deploy-all.sh` / `deploy/clean-all.sh` 已拆分为 `deploy/deploy_one_by_one/` 下的「调度器 + 5 套组件脚本」（原始胖脚本保留为 `deploy/deploy-all.sh.bak` / `deploy/clean-all.sh.bak`）。新入口示例：
+> ```bash
+> bash deploy/deploy_one_by_one/deploy-all.sh --skip-build        # 全量（跳过镜像构建）
+> bash deploy/deploy_one_by_one/deploy-all.sh elk prometheus      # 仅重启指定组件
+> bash deploy/deploy_one_by_one/clean-all.sh --all                # 全量清理
+> ```
+> 组件名：`ingress-controller` / `elk` / `prometheus` / `backend-app`（原 `ingress-svc`，已重命名）/ `gateway`。
 
 脚本自动完成：
 1. 构建后端镜像（Django + Gunicorn）
@@ -232,8 +240,8 @@ curl http://127.0.0.1:9008/api/health
 ### 一键清理
 
 ```bash
-bash deploy/clean-all.sh
-# 删除所有 namespace + cluster 资源 + 本地网关容器 + port-forward 进程
+bash deploy/deploy_one_by_one/clean-all.sh
+# 删除所有 namespace + cluster 资源 + 本地网关容器
 ```
 
 ### 步骤 0: 搭建 K8s 集群（如尚未搭建）
@@ -279,7 +287,7 @@ kubectl wait --for=condition=ready pod -n prd --all --timeout=120s
 # 2. 配置 Windows 代理绕过（如需要）
 # reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyOverride /t REG_SZ /d "原有值;*.daiyi.local.com" /f
 
-# 3. 启动本地网关（已包含在 deploy-all.sh 中，也可单独执行）
+# 3. 启动本地网关（已包含在 deploy/deploy_one_by_one/deploy-all.sh 中，也可单独执行）
 bash deploy/gateway/start.sh
 
 # 4. 浏览器访问
@@ -288,7 +296,7 @@ bash deploy/gateway/start.sh
 
 > 💡 **Windows hosts 与 DNS 解析**: `*.daiyi.local.com` 不是公网域名，浏览器无法通过公共 DNS（如 `8.8.8.8`）解析它。Windows hosts 文件本质上是 **本地 DNS 覆盖**——当浏览器请求解析域名时，Windows 先查 hosts 文件，找到匹配行 `127.0.0.1 xxx.daiyi.local.com` 就直接返回 IP，不再请求上游 DNS。DNS → 网关的完整链路见上文 [网络链路逐层解析](#网络链路逐层解析)。
 >
-> 💡 `start.sh` 内置 **NodePort + port-forward 双保险**：优先使用 NodePort 30000，不可达时自动启动 `kubectl port-forward` 兜底。
+> 💡 `start.sh` 以 **`--network host`** 模式启动网关：容器共享宿主机网络命名空间，`127.0.0.1:9001` 即宿主机端口、`127.0.0.1:30000` 直连 Ingress NodePort，**无需 `kubectl port-forward`、也无需 `host.docker.internal` / `--add-host`**，从根本上规避了 IPv4/IPv6 解析错位导致的 502。
 >
 > 📖 详细说明见 [docs/本地网关部署指南.md](docs/本地网关部署指南.md)
 
@@ -392,7 +400,16 @@ k8s_cicd/
 │       ├── django/Dockerfile
 │       └── vue/Dockerfile
 ├── deploy/                              # K8s 部署清单
-│   ├── deploy-all.sh                    # 一键部署（含 ELK + Prometheus）
+│   ├── deploy_one_by_one/              # 组件化部署脚本（推荐入口）
+│   │   ├── _env.sh                     # 公共环境（MSYS 路径修复 + k8s_delete_ns 助手）
+│   │   ├── deploy-all.sh / clean-all.sh # 部署/清理调度器
+│   │   ├── deploy-ingress-controller.sh / clean-ingress-controller.sh
+│   │   ├── deploy-elk.sh / clean-elk.sh
+│   │   ├── deploy-prometheus.sh / clean-prometheus.sh
+│   │   ├── deploy-backend-app.sh / clean-backend-app.sh  # 原 ingress-svc，已重命名
+│   │   └── deploy-gateway.sh / clean-gateway.sh
+│   ├── deploy-all.sh.bak               # 原始胖脚本备份（仅供参考）
+│   ├── clean-all.sh.bak                # 原始胖脚本备份（仅供参考）
 │   ├── ingress-nginx/                   # Ingress-NGINX 网关基础设施
 │   │   ├── 01-namespace.yaml            # ingress-nginx Namespace
 │   │   ├── 02-rbac.yaml                 # RBAC (SA + Role + ClusterRole)
@@ -508,9 +525,9 @@ npm run dev
 | 网关使用 `nginx:latest` 而非 OpenResty | 更轻量，功能满足需求 |
 | 网关端口 9001 而非 80 | 避免 WSL wslrelay / IIS 抢占 80 端口 |
 | NodePort 30000 而非 `kubectl port-forward` | NodePort 随集群存活，不依赖终端常驻 |
-| `host.docker.internal` 解析宿主机 | Docker Desktop 内置，无需 `--add-host` |
+| 网关使用 `--network host` | 容器共享宿主机网络，`127.0.0.1` 即宿主机回环，直连 NodePort 30000；无需 `host.docker.internal` / `--add-host` / `kubectl port-forward` |
 | `deploy/gateway/`（原 `deploy/openresty/`） | 已重命名为 gateway/，反映实际使用的 nginx:latest |
-| `deploy/deploy-all.sh` 部署的是演示应用 | 和 k8s-console 控制台应用是两套独立部署；Console 部署见 `deploy/console/` |
+| `deploy/deploy_one_by_one/deploy-all.sh` 为组件化部署入口 | 原 `deploy/deploy-all.sh` / `deploy/clean-all.sh` 已拆分为调度器 + 5 套组件脚本；原始胖脚本保留为 `deploy/deploy-all.sh.bak` / `deploy/clean-all.sh.bak` |
 
 ## 日志收集 (ELK + Kafka)
 

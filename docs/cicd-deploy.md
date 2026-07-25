@@ -61,7 +61,7 @@ CI/CD 部署子系统可以让你在 **Web 控制台中一键完成**从源码�
 
 ### 前置条件
 
-1. K8s Console 已部署并正常运行（`bash deploy/deploy-all.sh`）
+1. K8s Console 已部署并正常运行（`bash deploy/deploy_one_by_one/deploy-all.sh`）
 2. **Builder Service 已在宿主机启动**（见下方）
 3. 目标项目的源码必须在宿主机上存在（Local Copy 模式）
 
@@ -305,7 +305,7 @@ Builder Service 每次构建完成后自动清理：
 ```
 然后刷新浏览器即可。
 
-> 💡 **完整链路**: 浏览器 → `hosts 解析到 127.0.0.1:9001` → Docker NGINX 网关容器 → `host.docker.internal:30000` → K8s ingress-nginx NodePort → Ingress 规则匹配 host → Service → Pod。
+> 💡 **完整链路**: 浏览器 → `hosts 解析到 127.0.0.1:9001` → Docker NGINX 网关容器（`--network host`）→ `127.0.0.1:30000` → K8s ingress-nginx NodePort → Ingress 规则匹配 host → Service → Pod。
 
 ### 2. Builder Service 不可达 → 部署立即失败
 

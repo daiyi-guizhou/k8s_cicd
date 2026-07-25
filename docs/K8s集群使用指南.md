@@ -99,7 +99,7 @@ kubectl get nodes
 ```
 ① 搭建 K8s 集群（本节）
     ↓
-② 安装 Ingress-NGINX（见第 5 节，或 bash deploy/deploy-all.sh）
+② 安装 Ingress-NGINX（见第 5 节，或 bash deploy/deploy_one_by_one/deploy-all.sh）
     ↓
 ③ 部署数据库 MySQL + Redis（kubectl apply -f deploy/database/）
     ↓

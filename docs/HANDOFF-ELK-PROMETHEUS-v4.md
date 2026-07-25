@@ -41,8 +41,8 @@
 | `backend/k8s_console/settings.py` | LOGGING 重构: FileHandler + JSON formatter + request_id filter + LOG_DIR 定义 |
 | `deploy/console/05-backend.yaml` | 新增 emptyDir + Filebeat sidecar + SERVICE_NAME/LOG_DIR 环境变量 |
 | `deploy/logging/03-fluentd.yaml` → `.disabled` | 旧 DaemonSet 禁用 |
-| `deploy/deploy-all.sh` | Step 5 名称更新, --help 文本更新 |
-| `deploy/clean-all.sh` | 标题更新含 Kafka |
+| `deploy/deploy-all.sh` | Step 5 名称更新, --help 文本更新（现已组件化为 `deploy/deploy_one_by_one/deploy-all.sh`，原文件保留为 `deploy/deploy-all.sh.bak`） |
+| `deploy/clean-all.sh` | 标题更新含 Kafka（现已组件化为 `deploy/deploy_one_by_one/clean-all.sh`，原文件保留为 `deploy/clean-all.sh.bak`） |
 | `deploy/verify-monitoring.sh` | 新增 Kafka + Filebeat sidecar 检查 |
 | `readme.md` | ELK 表格、项目树、日志收集架构全部更新 |
 | `docs/final_delivery_v4.md` | 新增最终交付报告 |
@@ -141,7 +141,7 @@ Windows hosts:
 
 ## 下次继续
 
-1. **部署验证**: `bash deploy/deploy-all.sh --clean`
+1. **部署验证**: `bash deploy/deploy_one_by_one/deploy-all.sh --clean`
 2. **浏览器测试**: 确认 Kibana 可见 backend 日志, Grafana 数据正常
 3. **前端日志**: Vue 前端暂未接入日志采集 (预留设计在模板文档中)
 4. **多 Pod 时序**: Kafka `partition.round_robin` + `request_id` 已保证, 但多 Pod 精确时序需 Kafka message timestamp

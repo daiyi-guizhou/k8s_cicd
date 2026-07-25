@@ -2,6 +2,15 @@
   <div>
     <h2 style="margin-bottom:16px;">📦 资源管理</h2>
 
+    <!-- 监控与日志快捷入口：集中跳转 Prometheus / Alertmanager / Grafana / Kibana -->
+    <div class="quick-links">
+      <span class="ql-label">🔗 监控与日志：</span>
+      <a class="ql-link" href="http://grafana.monitoring.local:9001/" target="_blank" rel="noopener">📊 Grafana</a>
+      <a class="ql-link" href="http://prometheus.monitoring.local:9091/" target="_blank" rel="noopener">🔥 Prometheus</a>
+      <a class="ql-link" href="http://alertmanager.monitoring.local:9091/" target="_blank" rel="noopener">🔔 Alertmanager</a>
+      <a class="ql-link" href="http://kibana.logging.local:9001/" target="_blank" rel="noopener">🔍 Kibana</a>
+    </div>
+
     <!-- Toolbar: 3 filters -->
     <div class="toolbar">
       <!-- Resource type combobox -->
@@ -560,5 +569,41 @@ watch(currentType, () => {
 }
 .actions-cell .btn {
   margin-right: 4px;
+}
+
+/* 监控与日志快捷入口 */
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.ql-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.ql-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ql-link:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
 }
 </style>

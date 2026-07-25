@@ -37,8 +37,8 @@
 | backend/k8s_console/settings.py | LOGGING 重构 + LOG_DIR + MIDDLEWARE RequestID |
 | backend/k8s_console/middleware.py | 新增 RequestIDMiddleware |
 | deploy/console/05-backend.yaml | emptyDir + Filebeat sidecar + env 变量 |
-| deploy/deploy-all.sh | Step 5 描述 + help 文本 |
-| deploy/clean-all.sh | 标题更新 |
+| deploy/deploy-all.sh | Step 5 描述 + help 文本（现已组件化为 `deploy/deploy_one_by_one/deploy-all.sh`，原文件保留为 `deploy/deploy-all.sh.bak`） |
+| deploy/clean-all.sh | 标题更新（现已组件化为 `deploy/deploy_one_by_one/clean-all.sh`，原文件保留为 `deploy/clean-all.sh.bak`） |
 | deploy/verify-monitoring.sh | Kafka + Filebeat 检查 |
 | readme.md | 架构/项目树/文档全面更新 |
 | docs/* (新增 v4 交接/交付文档) | 完整架构文档 |
@@ -62,7 +62,7 @@
 
 ```bash
 # 1. 清理 + 重新部署
-bash deploy/deploy-all.sh --clean
+bash deploy/deploy_one_by_one/deploy-all.sh --clean
 
 # 2. 验证所有组件
 bash deploy/verify-monitoring.sh
@@ -82,6 +82,6 @@ kubectl get pods -n prd -l app=k8s-console-backend -o json | python3 -c "..."
 
 ## 下次继续
 
-1. `bash deploy/deploy-all.sh --clean` 端到端部署验证
+1. `bash deploy/deploy_one_by_one/deploy-all.sh --clean` 端到端部署验证
 2. Chrome DevTools MCP 测试 Dashboard 跳转按钮
 3. 按 docs/logging-template.md 为新 Django 服务接入日志

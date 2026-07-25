@@ -1,0 +1,23 @@
+# Alertmanager Ingress — 供网关 9091 端口按 Host 路由访问
+# 浏览器: http://alertmanager.monitoring.local:9091/  (需 hosts 解析 + 代理 bypass)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: alertmanager
+  namespace: prd
+  labels:
+    app: alertmanager
+    component: monitoring
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: alertmanager.monitoring.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: alertmanager
+                port:
+                  number: 9093
