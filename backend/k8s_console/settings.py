@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "apps.monitoring",
     "apps.logging_api",
     "apps.observability",
+    "apps.income.apps.IncomeConfig",
     
 ]
 

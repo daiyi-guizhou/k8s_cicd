@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prometheus 监控实现 · 学习指南</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #57606a;
+    --line: #d0d7de;
+    --soft: #f6f8fa;
+    --accent: #185fa5;
+    --green: #2da44e;
+    --amber: #bf8700;
+    --red: #cf222e;
+    --purple: #8250df;
+    --code-bg: #f6f8fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  .page { max-width: 960px; margin: 0 auto; padding: 32px 24px 80px; }
+  header.hero {
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 18px;
+    margin-bottom: 8px;
+  }
+  header.hero h1 { font-size: 28px; margin: 0 0 6px; }
+  header.hero p { color: var(--muted); margin: 0; }
+  nav.toc {
+    background: var(--soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 24px 0 36px;
+  }
+  nav.toc h2 { font-size: 14px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  nav.toc ol { margin: 0; padding-left: 20px; }
+  nav.toc li { margin: 3px 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  section { margin-bottom: 40px; }
+  h2 { font-size: 22px; border-left: 4px solid var(--accent); padding-left: 12px; margin: 36px 0 16px; }
+  h3 { font-size: 17px; margin: 26px 0 10px; color: #24292f; }
+  p { margin: 10px 0; }
+  a { color: var(--accent); }
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  pre code { border: 0; padding: 0; background: none; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 14px 0;
+    font-size: 13.5px;
+  }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); font-weight: 600; }
+  tr:nth-child(even) td { background: #fbfcfd; }
+  .diagram {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px;
+    margin: 18px 0;
+  }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  .callout {
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 14px;
+    border: 1px solid;
+  }
+  .callout.warn { background: #fff8e6; border-color: #f0c000; color: #6b4e00; }
+  .callout.tip  { background: #eaf6ff; border-color: #b6dbff; color: #0b4a82; }
+  .callout.danger { background: #fdecec; border-color: #f0a0a0; color: #8a1f1f; }
+  .callout b { color: inherit; }
+  .tag {
+    display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 20px;
+    background: var(--soft); border: 1px solid var(--line); color: var(--muted); margin-right: 4px;
+  }
+  .foot { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <h1>Prometheus 监控实现 · 学习指南</h1>
+    <p>本项目（k8s-cicd）真实部署的监控栈拆解：链路 → 配置 → 规则。可离线阅读。</p>
+  </header>
+
+  <nav class="toc">
+    <h2>目录</h2>
+    <ol>
+      <li><a href="#chain">一、整体链路（数据怎么流动）</a></li>
+      <li><a href="#access">二、浏览器访问链路</a></li>
+      <li><a href="#pullpath">三、Pull 网络链路（与网关访问路径的区别）</a></li>
+      <li><a href="#config">四、配置详解（都在 02-prometheus.yaml）</a></li>
+      <li><a href="#rules">五、规则详解（11 条 / 3 组）</a></li>
+      <li><a href="#status">六、当前状态的两个未决项</a></li>
+      <li><a href="#keypoints">七、学习重点（划重点）</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ 一、链路 ============ -->
+  <section id="chain">
+    <h2>一、整体链路（数据怎么流动）</h2>
+    <p>理解这套监控只需抓住两件事：</p>
+    <ul>
+      <li><b>Prometheus 是「拉（pull）」模型</b>：它主动去找被监控对象要指标，而不是别人推给它。</li>
+      <li><b>所有 Web 入口收口在「网关 + Ingress 的 Host 路由」</b>：无论 Prometheus / Grafana / Alertmanager，浏览器都从同一个网关进来，靠域名（Host 头）区分。</li>
+    </ul>
+
+    <p>下面这张图是<b>数据/控制平面</b>：被监控对象被 Prometheus 每 15s 拉取 → 写进本地 TSDB 时序库（保留 15 天）→ 同时每 15s 评估规则 → 命中就发告警给 Alertmanager；另一边 Grafana 把 Prometheus 当数据源画出看板。</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 680 540" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <text x="340" y="28" text-anchor="middle" font-size="15" font-weight="500" fill="#202124">Prometheus 监控链路：采集 → 存储 → 规则 → 告警 / 可视化</text>
+        <rect x="40" y="44" width="600" height="32" rx="8" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+        <text x="340" y="64" text-anchor="middle" font-size="13" font-weight="500" fill="#27500A">1  采集目标 Targets（各自暴露 :port/metrics，Prometheus 每 15s 主动拉取）</text>
+        <g font-family="sans-serif">
+          <rect x="40" y="92" width="110" height="72" rx="6" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+          <text x="95" y="114" text-anchor="middle" font-size="11" font-weight="500" fill="#27500A">node-exporter</text>
+          <text x="95" y="132" text-anchor="middle" font-size="11" fill="#3B6D11">DaemonSet :9100</text>
+          <text x="95" y="150" text-anchor="middle" font-size="11" fill="#3B6D11">节点 CPU/内存/磁盘</text>
+          <rect x="158" y="92" width="110" height="72" rx="6" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+          <text x="213" y="114" text-anchor="middle" font-size="11" font-weight="500" fill="#27500A">kubelet/cAdvisor</text>
+          <text x="213" y="132" text-anchor="middle" font-size="11" fill="#3B6D11">容器级指标</text>
+          <text x="213" y="150" text-anchor="middle" font-size="11" fill="#3B6D11">(k8s_sd node 角色)</text>
+          <rect x="276" y="92" width="110" height="72" rx="6" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+          <text x="331" y="114" text-anchor="middle" font-size="11" font-weight="500" fill="#27500A">kube-apiserver</text>
+          <text x="331" y="132" text-anchor="middle" font-size="11" fill="#3B6D11">:6443 https</text>
+          <text x="331" y="150" text-anchor="middle" font-size="11" fill="#3B6D11">控制面健康</text>
+          <rect x="394" y="92" width="110" height="72" rx="6" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+          <text x="449" y="114" text-anchor="middle" font-size="11" font-weight="500" fill="#27500A">业务 Pod</text>
+          <text x="449" y="132" text-anchor="middle" font-size="11" fill="#3B6D11">console-backend</text>
+          <text x="449" y="150" text-anchor="middle" font-size="11" fill="#3B6D11">注解 scrape</text>
+          <rect x="512" y="92" width="110" height="72" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5" stroke-dasharray="4 3"/>
+          <text x="567" y="114" text-anchor="middle" font-size="11" font-weight="500" fill="#444441">kube-state-metrics</text>
+          <text x="567" y="132" text-anchor="middle" font-size="11" fill="#5F5E5A">:8080 scaled 0</text>
+          <text x="567" y="150" text-anchor="middle" font-size="11" fill="#5F5E5A">kube_* 对象指标</text>
+        </g>
+        <line x1="340" y1="164" x2="340" y2="188" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="348" y="180" font-size="11" fill="#5F5E5A">pull × 10 jobs</text>
+        <rect x="190" y="188" width="300" height="140" rx="10" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+        <text x="340" y="212" text-anchor="middle" font-size="14" font-weight="500" fill="#633806">Prometheus  v2.53.3</text>
+        <text x="340" y="232" text-anchor="middle" font-size="12" fill="#854F0B">scrape 15s · 单副本 · Recreate（RWO PVC）</text>
+        <rect x="206" y="246" width="130" height="68" rx="6" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+        <text x="271" y="268" text-anchor="middle" font-size="12" font-weight="500" fill="#633806">TSDB 时序库</text>
+        <text x="271" y="286" text-anchor="middle" font-size="11" fill="#854F0B">retention 15d</text>
+        <text x="271" y="304" text-anchor="middle" font-size="11" fill="#854F0B">PVC 10Gi RWO</text>
+        <rect x="344" y="246" width="130" height="68" rx="6" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+        <text x="409" y="268" text-anchor="middle" font-size="12" font-weight="500" fill="#633806">规则评估</text>
+        <text x="409" y="286" text-anchor="middle" font-size="11" fill="#854F0B">eval 15s</text>
+        <text x="409" y="304" text-anchor="middle" font-size="11" fill="#854F0B">11 条 / 3 组</text>
+        <line x1="262" y1="330" x2="178" y2="370" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="418" y1="330" x2="502" y2="370" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="150" y="356" font-size="11" fill="#5F5E5A">alerts</text>
+        <text x="532" y="356" font-size="11" fill="#5F5E5A">query</text>
+        <rect x="40" y="372" width="270" height="84" rx="10" fill="#FCEBEB" stroke="#A32D2D" stroke-width="0.5"/>
+        <text x="175" y="396" text-anchor="middle" font-size="13" font-weight="500" fill="#501313">Alertmanager  v0.27.0</text>
+        <text x="175" y="416" text-anchor="middle" font-size="11" fill="#791F1F">route → receiver: null</text>
+        <text x="175" y="436" text-anchor="middle" font-size="11" fill="#791F1F">group_wait 10s / repeat 1h</text>
+        <text x="175" y="454" text-anchor="middle" font-size="11" font-weight="500" fill="#A32D2D">当前只记录不通知</text>
+        <rect x="370" y="372" width="270" height="84" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+        <text x="505" y="396" text-anchor="middle" font-size="13" font-weight="500" fill="#26215C">Grafana</text>
+        <text x="505" y="416" text-anchor="middle" font-size="11" fill="#3C3489">数据源: Prometheus</text>
+        <text x="505" y="436" text-anchor="middle" font-size="11" fill="#3C3489">看板 K8s Cluster Overview</text>
+        <text x="505" y="454" text-anchor="middle" font-size="11" fill="#3C3489">4 面板（cadvisor 兜底）</text>
+        <line x1="175" y1="456" x2="175" y2="470" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <rect x="40" y="470" width="270" height="44" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+        <text x="175" y="490" text-anchor="middle" font-size="12" font-weight="500" fill="#2C2C2A">通知渠道 Email/Webhook/Slack</text>
+        <text x="175" y="508" text-anchor="middle" font-size="11" fill="#5F5E5A">未配置 → 告警不外出</text>
+        <line x1="505" y1="456" x2="505" y2="470" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <rect x="370" y="470" width="270" height="44" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+        <text x="505" y="490" text-anchor="middle" font-size="12" font-weight="500" fill="#2C2C2A">浏览器看板 / 即席查询</text>
+        <text x="505" y="508" text-anchor="middle" font-size="11" fill="#5F5E5A">图表 + PromQL 探索</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ============ 二、访问链路 ============ -->
+  <section id="access">
+    <h2>二、浏览器访问链路</h2>
+    <p>这张图是<b>Web 入口平面</b>：浏览器打 <code>FQDN:9001/:9091</code> → 本地 nginx 网关（docker 容器，<code>--network host</code>）→ 转发到 K8s Ingress NodePort 30000 → Ingress 按 <b>Host 头</b>路由到对应 Service → Pod。</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 680 500" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <text x="340" y="28" text-anchor="middle" font-size="15" font-weight="500" fill="#202124">浏览器访问链路：网关 → Ingress → Service → Pod</text>
+        <rect x="240" y="48" width="200" height="56" rx="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+        <text x="340" y="72" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">浏览器</text>
+        <text x="340" y="92" text-anchor="middle" font-size="11" fill="#0C447C">FQDN :9001 / :9091</text>
+        <line x1="340" y1="104" x2="340" y2="148" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow2)"/>
+        <text x="350" y="130" font-size="11" fill="#5F5E5A">hosts→127.0.0.1 + 代理 bypass</text>
+        <rect x="200" y="148" width="280" height="72" rx="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+        <text x="340" y="172" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">nginx 网关 (docker k8s-gateway)</text>
+        <text x="340" y="192" text-anchor="middle" font-size="11" fill="#0C447C">--network host · listen 9001/9091</text>
+        <text x="340" y="210" text-anchor="middle" font-size="11" fill="#0C447C">proxy_pass 127.0.0.1:30000（按 Host 头）</text>
+        <line x1="340" y1="220" x2="340" y2="248" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow2)"/>
+        <rect x="160" y="248" width="360" height="74" rx="10" fill="#EAF3DE" stroke="#639922" stroke-width="0.5"/>
+        <text x="340" y="272" text-anchor="middle" font-size="13" font-weight="500" fill="#173404">Ingress-NGINX（NodePort 30000）</text>
+        <text x="340" y="292" text-anchor="middle" font-size="11" fill="#27500A">按 Host 头路由</text>
+        <text x="340" y="310" text-anchor="middle" font-size="11" fill="#27500A">prometheus/grafana/alertmanager.monitoring.local</text>
+        <line x1="340" y1="322" x2="340" y2="350" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow2)"/>
+        <rect x="160" y="350" width="360" height="56" rx="10" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+        <text x="340" y="372" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">Service (ClusterIP)</text>
+        <text x="340" y="392" text-anchor="middle" font-size="11" fill="#633806">prometheus:9090 · grafana:80 · alertmanager:9093</text>
+        <line x1="340" y1="406" x2="340" y2="434" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#arrow2)"/>
+        <rect x="220" y="434" width="240" height="44" rx="10" fill="#FCEBEB" stroke="#A32D2D" stroke-width="0.5"/>
+        <text x="340" y="460" text-anchor="middle" font-size="13" font-weight="500" fill="#501313">监控 Pod（prd 命名空间）</text>
+      </svg>
+    </div>
+
+    <div class="callout tip">
+      <b>本地访问前置条件：</b>本机有 <code>HTTP_PROXY=127.0.0.1:9674</code> 会拦截这些 FQDN。所以浏览器访问前要做两件事：① <code>C:\Windows\System32\drivers\etc\hosts</code> 里加上
+      <code>127.0.0.1 prometheus.monitoring.local</code> 等条目；② 把这些域名（或 <code>*.monitoring.local</code>、<code>*.logging.local</code>）加入代理的 No-Proxy / bypass。否则会看到 502。
+    </div>
+  </section>
+
+  <!-- ============ 三、Pull 网络链路 ============ -->
+  <section id="pullpath">
+    <h2>三、Pull 网络链路（与网关访问路径的区别）</h2>
+    <p>前面两节分别看了「数据怎么流动」和「人怎么访问页面」。这节把镜头拉到<b>网络包级别</b>：一次 scrape 里，指标到底从哪台机器的内存，走到哪台机器的磁盘。先把结论说清——<b>Pull 模型里，流量由 Prometheus 发起，方向是「Prometheus 出门找后端取」</b>，不是后端推给 Prometheus。</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 680 392" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <text x="340" y="26" text-anchor="middle" font-size="14" font-weight="500" fill="#202124">Pull 网络链路：指标从后端内存 → 集群网络 → Prometheus TSDB</text>
+        <rect x="394" y="40" width="110" height="40" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+        <text x="449" y="60" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">K8s API Server</text>
+        <line x1="449" y1="80" x2="449" y2="118" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow3)"/>
+        <text x="520" y="100" font-size="11" fill="#444441">sd 告知目标=PodIP:8000</text>
+        <rect x="40" y="120" width="100" height="64" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+        <text x="90" y="144" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">业务进程内存</text>
+        <text x="90" y="164" text-anchor="middle" font-size="11" fill="#444441">Gauge user_income</text>
+        <rect x="158" y="120" width="100" height="64" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+        <text x="208" y="144" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">Django HTTP</text>
+        <text x="208" y="164" text-anchor="middle" font-size="11" fill="#444441">/metrics :8000</text>
+        <rect x="276" y="120" width="100" height="64" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+        <text x="326" y="144" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">K8s 集群网络</text>
+        <text x="326" y="164" text-anchor="middle" font-size="11" fill="#444441">PodIP:8000 CNI</text>
+        <rect x="394" y="120" width="100" height="64" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+        <text x="444" y="144" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">Prometheus</text>
+        <text x="444" y="164" text-anchor="middle" font-size="11" fill="#444441">scrape loop GET</text>
+        <rect x="512" y="120" width="100" height="64" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+        <text x="562" y="144" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">解析 + 写入</text>
+        <text x="562" y="164" text-anchor="middle" font-size="11" fill="#444441">TSDB PVC 15d</text>
+        <line x1="140" y1="152" x2="156" y2="152" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow3)"/>
+        <text x="148" y="142" text-anchor="middle" font-size="10" fill="#185FA5">set</text>
+        <line x1="258" y1="152" x2="274" y2="152" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow3)"/>
+        <text x="266" y="142" text-anchor="middle" font-size="10" fill="#185FA5">TCP</text>
+        <line x1="376" y1="152" x2="392" y2="152" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow3)"/>
+        <text x="384" y="142" text-anchor="middle" font-size="10" fill="#185FA5">GET</text>
+        <line x1="494" y1="152" x2="510" y2="152" stroke="#185FA5" stroke-width="1.5" marker-end="url(#arrow3)"/>
+        <text x="502" y="142" text-anchor="middle" font-size="10" fill="#185FA5">收包</text>
+        <line x1="414" y1="108" x2="258" y2="108" stroke="#185FA5" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arrow3)"/>
+        <text x="336" y="98" text-anchor="middle" font-size="11" fill="#185FA5">响应: 明文指标行</text>
+        <line x1="562" y1="184" x2="454" y2="220" stroke="#BA7517" stroke-width="1.5" marker-end="url(#arrow3)"/>
+        <line x1="562" y1="184" x2="600" y2="220" stroke="#BA7517" stroke-width="1.5" marker-end="url(#arrow3)"/>
+        <rect x="394" y="220" width="120" height="52" rx="8" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+        <text x="454" y="242" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">规则评估</text>
+        <text x="454" y="260" text-anchor="middle" font-size="11" fill="#444441">→ Alertmanager</text>
+        <rect x="540" y="220" width="120" height="52" rx="8" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+        <text x="600" y="242" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">Grafana 读</text>
+        <text x="600" y="260" text-anchor="middle" font-size="11" fill="#444441">/api/v1/query</text>
+        <rect x="40" y="310" width="600" height="48" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+        <text x="60" y="334" font-size="12" fill="#444441">注意: 浏览器访问才走网关 :9001/:9091 (Ingress NodePort)。scrape 是 Pod→Pod 集群内流量，不经过网关。</text>
+      </svg>
+    </div>
+
+    <h3>3.1 逐步走一遍（对应本项目真实地址）</h3>
+    <ol>
+      <li><b>第 0 步 · 服务发现先告诉 Prometheus「连谁」</b>（图上方蓝线）：<code>console-backend</code> job 用 <code>kubernetes_sd_configs</code>，拿 SA token 问 K8s API Server「<code>app=k8s-console-backend</code> 的 Pod 在哪？」K8s 回答 Pod IP（如 <code>10.244.x.x</code>）+ 端口 8000，Prometheus 填进目标的 <code>__address__</code>。这是 pull 能「自动跟随 Pod 漂移」的根本原因。</li>
+      <li><b>第 1 步 · 你的代码把值放进内存</b>：<code>upload_income</code> 执行 <code>user_income.labels(user_id=123, plan="unknown").set(8500)</code>。此时 <code>8500</code> 只活在 backend Pod 里 Django 进程内存中，外部还看不到。</li>
+      <li><b>第 2 步 · Django 把内存暴露成 HTTP 端点</b>：django_prometheus 在 <code>:8000/metrics</code> 挂了处理器，调用 <code>generate_latest()</code> 把进程内所有已注册指标（含 <code>user_income</code>、<code>django_*</code>）序列化成纯文本，等别人来 GET。</li>
+      <li><b>第 3 步 · TCP 连接（Pod → Pod 集群内直连）</b>：Prometheus 抓取循环（每 15s）发起 <code>TCP 10.244.x.x:8000</code>。关键点：这是<b>集群内部 Pod 到 Pod 的流量</b>，走 CNI 网络，<b>不上 NodePort、不经网关、不经 Ingress</b>。</li>
+      <li><b>第 4 步 · HTTP GET /metrics</b>：连上后发 <code>GET /metrics</code>，路径/端口来自 relabel 的 <code>__metrics_path__</code> 与 <code>__address__</code>（你的 <code>05-backend.yaml</code> 注解 <code>prometheus.io/path: /metrics</code>、<code>port: 8000</code> 在此生效）。</li>
+      <li><b>第 5 步 · 响应：明文指标行回来</b>（图虚线返回箭头）：backend 把第 2 步生成的文本回给 Prometheus，形如 <code>user_income{user_id="123",plan="unknown"} 8500</code>，沿<b>同一个 TCP 连接</b>返回。</li>
+      <li><b>第 6 步 · Prometheus 解析 + 贴标签 + 写盘</b>：每行文本解析成样本（指标名+标签+数值），自动补 <code>job="console-backend"</code>、<code>instance="10.244.x.x:8000"</code> 及 relabel 映射来的 <code>kubernetes_namespace="prd"</code> 等，打上抓取时刻时间戳，写进本地 TSDB（PVC <code>prometheus-data</code>，保留 15 天）。</li>
+      <li><b>第 7 步 · 下游两条支线</b>（图下方琥珀色）：① 告警线——评估循环用 TSDB 跑规则（如 <code>ConsoleBackendDown</code>），命中 POST 给 Alertmanager；② 查询线——Grafana 通过 <code>/api/v1/query</code> 读 Prometheus（也是 HTTP，但方向是「查」）。</li>
+    </ol>
+
+    <h3>3.2 最容易混淆：scrape 根本不走网关</h3>
+    <p>你前面配了 <code>:9001</code>/<code>:9091</code> 网关 + Ingress NodePort <code>30000</code>——那套<b>只给你（人）的浏览器用</b>，让 <code>prometheus.monitoring.local:9091</code> 能打开页面。而 Prometheus 抓 backend 的链路，完全不经过网关/Ingress/NodePort。对比：</p>
+    <table>
+      <thead><tr><th>场景</th><th>路径</th></tr></thead>
+      <tbody>
+        <tr><td>你浏览器打开 Prometheus 页面</td><td>浏览器 → 网关 :9091 → Ingress :30000 → prometheus Service → Pod</td></tr>
+        <tr><td>Prometheus 抓 backend 指标（scrape）</td><td>prometheus Pod → 集群网络 → backend Pod IP:8000</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn"><b>推论：</b>「网关挂了」只影响你看图表，<b>不影响监控数据采集</b>；反过来，backend 的 <code>/metrics</code> 因端口/path 不对而 301，人也照样能打开 Prometheus 页面，但 targets 会显示 DOWN。两者解耦，正是 pull 的好处之一。</div>
+
+    <h3>3.3 为什么这条链路「稳」</h3>
+    <ul>
+      <li><b>目标死了立刻知道</b>：backend Pod 被删 → 下次 GET 失败 → <code>up{job="console-backend"}=0</code> → 可触发告警（push 模型下这事儿发现不了）。</li>
+      <li><b>地址自动跟随</b>：Pod 重启 IP 变了，下次服务发现就拿到新 IP，不用改任何配置。</li>
+      <li><b>出站即可</b>：只要 Prometheus 能主动连出去（集群内默认就通），不需要每个后端反向连回中心，防火墙/网络策略更简单。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 四、配置详解 ============ -->
+  <section id="config">
+    <h2>四、配置详解（都在 deploy/monitoring/02-prometheus.yaml）</h2>
+    <p>Prometheus 的全部行为由它的 ConfigMap（<code>prometheus-config</code>）决定，核心三段：<b>抓取配置</b> <code>scrape_configs</code>、<b>告警对接</b> <code>alerting</code>、<b>规则文件位置</b> <code>rule_files</code>。</p>
+
+    <h3>3.1 权限：先给 Prometheus 一个「读集群」的身份（RBAC）</h3>
+    <p>K8s 里任何组件想看 nodes/pods/endpoints，都得有 RBAC。文件开头就是：</p>
+    <ul>
+      <li><code>ServiceAccount: prometheus</code>（ns <code>prd</code>）</li>
+      <li><code>ClusterRole: prometheus</code>：允许 <code>get/list/watch</code> nodes、services、endpoints、pods、configmaps，以及访问非资源 URL <code>/metrics</code>、<code>/metrics/cadvisor</code></li>
+      <li><code>ClusterRoleBinding</code> 把它绑到这个 SA</li>
+    </ul>
+    <div class="callout warn"><b>坑：</b>没有这段，下面的 <code>kubernetes_sd_configs</code>（服务发现）就发现不了集群目标。</div>
+
+    <h3>3.2 抓取配置 scrape_configs：一共 10 个 job</h3>
+    <p>Prometheus 把「去哪抓、怎么抓」拆成一个个 <b>job</b>。按数据源分：</p>
+    <table>
+      <thead><tr><th>job 名</th><th>数据源</th><th>怎么发现目标</th><th>关键说明</th></tr></thead>
+      <tbody>
+        <tr><td><code>prometheus</code></td><td>自己</td><td>static <code>localhost:9090</code></td><td>监控 Prometheus 自身</td></tr>
+        <tr><td><code>kubernetes-apiservers</code></td><td>API Server</td><td>sd <code>role: endpoints</code>，keep <code>default;kubernetes;https</code></td><td>https + 携带 SA 的 token/ca</td></tr>
+        <tr><td><code>kubernetes-nodes</code></td><td>节点</td><td>sd <code>role: node</code></td><td>节点级指标，labelmap 节点标签</td></tr>
+        <tr><td><code>kubernetes-cadvisor</code></td><td>容器</td><td>sd <code>role: node</code>，<code>__metrics_path__=/metrics/cadvisor</code></td><td><b>容器 CPU/内存</b> 的来源</td></tr>
+        <tr><td><code>kubernetes-service-endpoints</code></td><td>带注解的 Service</td><td>sd <code>role: endpoints</code>，keep <code>prometheus.io/scrape=true</code></td><td>通用自动发现</td></tr>
+        <tr><td><code>kubernetes-pods</code></td><td>带注解的 Pod</td><td>sd <code>role: pod</code>，keep <code>prometheus.io/scrape=true</code></td><td>同上按 Pod</td></tr>
+        <tr><td><code>node-exporter</code></td><td>node-exporter</td><td>sd <code>role: endpoints</code> + <code>namespaces: [prd]</code></td><td><b>本次修复的关键点</b>：之前写成 <code>monitoring</code> 导致抓不到，节点面板全空</td></tr>
+        <tr><td><code>kube-state-metrics</code></td><td>kube-state-metrics</td><td>static <code>kube-state-metrics.prd.svc:8080</code></td><td>提供 <code>kube_*</code> 对象指标（当前 scaled 0）</td></tr>
+        <tr><td><code>console-backend</code></td><td>你的 Django 后端</td><td>sd <code>role: pod</code> + keep <code>app=k8s-console-backend</code></td><td>抓 <code>django_*</code>、<code>api_request_latency_*</code> 等业务指标</td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.3 两个值得学的概念</h3>
+    <p><b>① <code>kubernetes_sd_configs</code>（服务发现）</b>：不用手写 IP 列表，Prometheus 直接问 K8s API「现在有哪些 node/pod/endpoint」，自动生成抓取目标。集群扩缩容它自己跟着变。</p>
+    <p><b>② <code>relabel_configs</code>（重打标签）</b>：发现出来的目标带一堆内部标签（<code>__meta_kubernetes_*</code>），用 relabel 来「保留 / 改写 / 贴标签」。比如 <code>kubernetes-service-endpoints</code> 里：</p>
+    <ul>
+      <li><code>keep ... prometheus.io/scrape: true</code> → 只抓<b>显式声明</b>要监控的 Service；</li>
+      <li><code>replace ... prometheus.io/port</code> → 把注解里的端口拼进 <code>__address__</code>；</li>
+      <li><code>labelmap __meta_kubernetes_service_label_(.+)</code> → 把 K8s 的 service 标签变成 Prometheus 的标签。</li>
+    </ul>
+    <div class="callout tip">这套机制是 K8s 监控「零配置自动发现」的核心。想加一个新要监控的服务，只要给它打上 <code>prometheus.io/scrape: "true"</code> 等注解即可，不用改 Prometheus 配置。</div>
+
+    <h3>3.4 存储与部署（文件后半段）</h3>
+    <ul>
+      <li><b>镜像</b> <code>prom/prometheus:v2.53.3</code>，启动参数：<code>--storage.tsdb.path=/prometheus</code>、<code>--storage.tsdb.retention.time=15d</code>（数据保留 15 天）、<code>--web.enable-lifecycle</code>（支持热加载 <code>/-/reload</code>）。</li>
+      <li><b>持久化</b>：<code>PVC prometheus-data</code> 10Gi，<code>accessModes: ReadWriteOnce</code>（RWO，单节点够用）。</li>
+      <li><b>一个坑（已修）</b>：<code>strategy: Recreate</code>。默认 <code>RollingUpdate</code> 滚动更新时会起一个新 Pod，新旧 Pod 同时挂同一个 RWO PVC → <code>opening storage failed: lock DB directory</code> 崩溃循环。<b>单副本 + RWO 必须用 Recreate</b>，先删旧的再起新的。</li>
+    </ul>
+
+    <h3>3.5 告警对接</h3>
+    <pre><code>alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager.prd.svc:9093"]</code></pre>
+    <p>Prometheus 自己<b>只负责「判断要不要告警」</b>，真正「发给谁、怎么发」交给 Alertmanager。规则文件位置由 <code>rule_files: ["/etc/prometheus/rules/*.yml"]</code> 指定（挂的第二个 ConfigMap <code>prometheus-rules</code>）。</p>
+  </section>
+
+  <!-- ============ 五、规则详解 ============ -->
+  <section id="rules">
+    <h2>五、规则详解（11 条，3 个组，在 prometheus-rules ConfigMap）</h2>
+    <p>规则文件结构 = <code>groups</code> → 每个 group 有 <code>rules</code> → 每条 rule 是 <code>alert</code> + <code>expr</code> + <code>for</code> + <code>labels</code> + <code>annotations</code>。</p>
+
+    <h3>组 1：kubernetes-apps（4 条，看业务容器）</h3>
+    <table>
+      <thead><tr><th>告警</th><th>表达式核心</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>HighPodCPU</td><td><code>sum(rate(container_cpu_usage_seconds_total[5m])) by (pod,ns) &gt; 0.8</code></td><td>单 Pod CPU &gt; 0.8 核</td></tr>
+        <tr><td>HighPodMemory</td><td><code>container_memory_working_set_bytes / kube_pod_container_resource_limits</code> &gt; 0.8</td><td>内存占用超 limit 80%</td></tr>
+        <tr><td>PodCrashLooping</td><td><code>increase(kube_pod_container_status_restarts_total[15m]) &gt; 3</code></td><td>15 分钟内重启 &gt;3 次</td></tr>
+        <tr><td>PodNotReady</td><td><code>sum(kube_pod_status_ready{condition="true"}) == 0</code></td><td>Pod 长时间 NotReady</td></tr>
+      </tbody>
+    </table>
+
+    <h3>组 2：kubernetes-nodes（2 条，看节点）</h3>
+    <table>
+      <thead><tr><th>告警</th><th>表达式核心</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>HighNodeCPU</td><td><code>100 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))*100 &gt; 90</code></td><td>节点 CPU &gt; 90%</td></tr>
+        <tr><td>HighNodeMemory</td><td><code>(1 - MemAvailable/MemTotal)*100 &gt; 90</code></td><td>节点内存 &gt; 90%</td></tr>
+      </tbody>
+    </table>
+
+    <h3>组 3：console-app（5 条，看你的后端）</h3>
+    <table>
+      <thead><tr><th>告警</th><th>表达式核心</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>ConsoleBackendDown</td><td><code>up{job="console-backend"} == 0</code></td><td>后端挂了</td></tr>
+        <tr><td>HighErrorRate</td><td><code>rate(django_http_responses_total_by_status_total{status=~"5.."}[5m]) &gt; 0.1</code></td><td>5xx 错误率</td></tr>
+        <tr><td>DatabaseConnectionHigh</td><td><code>django_db_connections_total &gt; 80</code></td><td>数据库连接数</td></tr>
+        <tr><td>HighLogErrorRate</td><td><code>rate(django_log_errors_total[5m]) &gt; 2</code></td><td>错误日志速率</td></tr>
+        <tr><td>SlowAPIResponses</td><td><code>histogram_quantile(0.95, rate(api_request_latency_seconds_bucket[5m])) &gt; 2</code></td><td>API P95 延迟 &gt; 2s</td></tr>
+      </tbody>
+    </table>
+
+    <h3>4.1 告警生命周期（值得记）</h3>
+    <ol>
+      <li><code>expr</code> 每 15s 算一次；</li>
+      <li>结果为真且持续超过 <b><code>for: 5m</code></b>（避免抖动误报）→ 状态变 <code>PENDING</code>→<code>FIRING</code>；</li>
+      <li>FIRING 的告警推给 Alertmanager；</li>
+      <li>Alertmanager 按 <code>route</code> 分组（<code>group_by: [alertname, severity]</code>）、去重、按 <code>repeat_interval</code> 重复，再交给 <code>receiver</code>。</li>
+    </ol>
+    <div class="callout tip">当前实测：<b>11 条规则全部加载，0 firing</b>（集群健康）。</div>
+
+    <h3>4.2 Alertmanager 配置（06-alertmanager-config.yaml）</h3>
+    <pre><code>route:
+  receiver: "null"        # 默认接收器
+  routes:
+    - match: {severity: critical}
+      receiver: "null"    # critical 也走 null
+receivers:
+  - name: "null"          # 空接收器：只记录，不往外发</code></pre>
+    <div class="callout danger"><b>现状：</b>所以现在<b>告警能触发、能在 Prometheus/Alertmanager 页面看到，但不会发邮件 / 钉钉 / Webhook</b>。想真通知，把 <code>null</code> 换成 <code>webhook_configs</code> / <code>email_configs</code> 等，再 <code>kubectl rollout restart deployment/alertmanager -n prd</code>。详见 <code>docs/监控使用指南.md</code> §4.4。</div>
+  </section>
+
+  <!-- ============ 六、状态 ============ -->
+  <section id="status">
+    <h2>六、当前状态的两个未决项</h2>
+    <div class="callout warn">
+      <b>① kube-state-metrics 是 scaled 0</b>（镜像代理拉不到）。所以依赖 <code>kube_*</code> 的 3 条规则（PodCrashLooping / PodNotReady / HighPodMemory 分母）目前 <b>No Data</b>；Grafana 那两个面板已改成 cadvisor 等价查询兜底，所以看板照样有数。镜像可达后 <code>kubectl rollout restart deployment/kube-state-metrics -n prd</code> 即可补全。
+    </div>
+    <div class="callout warn">
+      <b>② Alertmanager receiver: null</b>：如上，告警不外出。这是「能看但不能通知」，需要接真实通知渠道才完整。
+    </div>
+  </section>
+
+  <!-- ============ 七、学习重点 ============ -->
+  <section id="keypoints">
+    <h2>七、学习重点（划重点）</h2>
+    <ul>
+      <li><b>pull 模型 + 服务发现</b>：Prometheus 主动抓，靠 <code>kubernetes_sd_configs</code> 自动找目标，靠 <code>relabel_configs</code> 过滤 / 贴标签。</li>
+      <li><b>TSDB 是时序数据库</b>：每个指标 = 名字 + 一组标签 + 时间戳样本；查的时候用 PromQL 按标签筛。</li>
+      <li><b>规则分 alerting（告警）和 recording（预计算）两类</b>，本项目只用 alerting。</li>
+      <li><b><code>for</code> 子句防抖</b>；<b>Alertmanager</b> 负责分组 / 静默 / 路由 / 通知，和 Prometheus 解耦。</li>
+      <li><b>入口收口</b>：所有 Web 访问都过网关(9001/9091) + Ingress Host 路由，本地还要配 <code>hosts</code> 和代理 bypass。</li>
+    </ul>
+    <div class="callout tip">配套文档：<code>docs/监控使用指南.md</code>（怎么访问、PromQL 示例、接通知渠道、FAQ）。本文件偏「原理拆解」，二者互补。</div>
+  </section>
+
+  <div class="foot">
+    本页对应仓库真实部署文件：<code>deploy/monitoring/02-prometheus.yaml</code>、<code>03-node-exporter.yaml</code>、<code>06-alertmanager-config.yaml</code>、<code>07-alertmanager.yaml</code>、<code>06-prometheus-ingress.yaml</code>、<code>09-alertmanager-ingress.yaml</code>、<code>deploy/gateway/nginx.conf</code>。生成于学习用途，离线可看。
+  </div>
+
+</div>
+</body>
+</html>
